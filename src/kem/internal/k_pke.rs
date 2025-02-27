@@ -505,86 +505,296 @@ fn decode_s_from_private_key(
 }
 
 // Auxiliary encoding and decoding functions
-// These would need to be properly implemented based on FIPS 203
-
+/// Encode a polynomial into bytes according to FIPS 203
+/// This encodes a polynomial with coefficients in [0, bound] into a byte array
 fn byte_encode(poly: &Polynomial, bound: u32) -> Result<Vec<u8>> {
-    // Simplified implementation
-    let mut result = Vec::new();
-    // Implementation would encode polynomial coefficients as bytes
-    Ok(result)
-}
-
-fn byte_encode_vector(polys: &[Polynomial], bound: usize) -> Result<Vec<u8>> {
-    let mut result = Vec::new();
-    for poly in polys {
-        result.extend(byte_encode(poly, bound as u32)?);
-    }
-    Ok(result)
-}
-
-fn byte_decode(bytes: &[u8], bound: u32) -> Result<Polynomial> {
-    // Simplified implementation
-    let mut poly = Polynomial::new();
-    // Implementation would decode bytes into polynomial coefficients
-    Ok(poly)
-}
-
-fn byte_decode_vector(bytes: &[u8], bound: usize) -> Result<Vec<Polynomial>> {
-    // Simplified implementation
-    let mut result = Vec::new();
-    // Implementation would decode bytes into polynomial vector
-    Ok(result)
-}
-
-fn byte_encode1(poly: Polynomial) -> Result<Vec<u8>> {
-    // Simplified implementation
-    let mut result = Vec::new();
-    // Implementation would encode polynomial coefficients as bytes for d=1
-    Ok(result)
-}
-
-fn byte_decode1(bytes: &[u8]) -> Result<Polynomial> {
-    // Simplified implementation
-    let mut poly = Polynomial::new();
-    // Implementation would decode bytes into polynomial for d=1
-    Ok(poly)
-}
-
-fn byte_to_bits(bytes: &[u8]) -> Result<Vec<u8>> {
-    let mut bits = Vec::with_capacity(bytes.len() * 8);
-    for byte in bytes {
-        for j in 0..8 {
-            bits.push((byte >> j) & 1);
+    // Calculate the number of bits needed per coefficient
+    let bits_per_coeff = aux::ceil_log2(bound + 1);
+    
+    // Calculate the size of the resulting byte array
+    let bytes_needed = (256 * bits_per_coeff as usize + 7) / 8;
+    let mut result = vec![0u8; bytes_needed];
+    
+    // Convert polynomial coefficients to bits
+    let mut bits = Vec::with_capacity(256 * bits_per_coeff as usize);
+    
+    for i in 0..256 {
+        let coeff = poly.coeffs[i] as u32;
+        if coeff > bound {
+            return Err(Error::EncodingError(format!("Coefficient out of range: {}", coeff)));
+        }
+        
+        // Store coefficient in bits_per_coeff bits
+        for j in 0..bits_per_coeff {
+            bits.push(((coeff >> j) & 1) as u8);
         }
     }
-    Ok(bits)
-}
-
-fn bit_pack(poly: &Polynomial, a: i32, b: i32) -> Result<Vec<u8>> {
-    // Simplified implementation
-    let mut result = Vec::new();
-    // Implementation would encode polynomial coefficients as bits
+    
+    // Pack bits into bytes
+    for i in 0..bytes_needed {
+        let mut byte = 0u8;
+        for j in 0..8 {
+            if i * 8 + j < bits.len() {
+                byte |= bits[i * 8 + j] << j;
+            }
+        }
+        result[i] = byte;
+    }
+    
     Ok(result)
 }
 
-fn bit_unpack(bytes: &[u8], a: i32, b: i32) -> Result<Polynomial> {
-    // Simplified implementation
+/// Decode a polynomial from bytes according to FIPS 203
+/// This decodes a byte array into a polynomial with coefficients in [0, bound]
+fn byte_decode(bytes: &[u8], bound: u32) -> Result<Polynomial> {
+    // Calculate the number of bits needed per coefficient
+    let bits_per_coeff = aux::ceil_log2(bound + 1);
+    
+    // Calculate the number of bytes needed
+    let bytes_needed = (256 * bits_per_coeff as usize + 7) / 8;
+    
+    if bytes.len() < bytes_needed {
+        return Err(Error::EncodingError(format!(
+            "Input too short: expected at least {} bytes, got {}",
+            bytes_needed, bytes.len()
+        )));
+    }
+    
+    // Convert bytes to bits
+    let bits = aux::bytes_to_bits(&bytes[0..bytes_needed]);
+    
+    // Create a new polynomial
     let mut poly = Polynomial::new();
-    // Implementation would decode bits into polynomial
+    
+    // Extract coefficients from bits
+    for i in 0..256 {
+        let start = i * bits_per_coeff as usize;
+        
+        if start + bits_per_coeff as usize > bits.len() {
+            return Err(Error::EncodingError("Not enough bits for polynomial".to_string()));
+        }
+        
+        let mut coeff = 0u32;
+        for j in 0..bits_per_coeff as usize {
+            coeff |= (bits[start + j] as u32) << j;
+        }
+        
+        if coeff > bound {
+            return Err(Error::EncodingError(format!("Decoded coefficient out of range: {}", coeff)));
+        }
+        
+        poly.coeffs[i] = coeff as i32;
+    }
+    
     Ok(poly)
 }
 
+/// Encode a vector of polynomials into bytes
+fn byte_encode_vector(polys: &[Polynomial], bound: usize) -> Result<Vec<u8>> {
+    let mut result = Vec::new();
+    
+    for poly in polys {
+        let encoded = byte_encode(poly, bound as u32)?;
+        result.extend_from_slice(&encoded);
+    }
+    
+    Ok(result)
+}
+
+/// Decode a vector of polynomials from bytes
+fn byte_decode_vector(bytes: &[u8], bound: usize) -> Result<Vec<Polynomial>> {
+    // Calculate the number of bits needed per coefficient
+    let bits_per_coeff = aux::ceil_log2(bound as u32 + 1);
+    
+    // Calculate the number of bytes needed per polynomial
+    let bytes_per_poly = (256 * bits_per_coeff as usize + 7) / 8;
+    
+    if bytes.len() % bytes_per_poly != 0 {
+        return Err(Error::EncodingError("Invalid input length".to_string()));
+    }
+    
+    let num_polys = bytes.len() / bytes_per_poly;
+    let mut result = Vec::with_capacity(num_polys);
+    
+    for i in 0..num_polys {
+        let start = i * bytes_per_poly;
+        let end = start + bytes_per_poly;
+        
+        let poly = byte_decode(&bytes[start..end], bound as u32)?;
+        result.push(poly);
+    }
+    
+    Ok(result)
+}
+
+/// Encode a polynomial for use in message encoding (d = 1)
+fn byte_encode1(poly: Polynomial) -> Result<Vec<u8>> {
+    // For d = 1, each coefficient is 0 or 1
+    let mut result = vec![0u8; 32]; // 256 bits = 32 bytes
+    
+    for i in 0..256 {
+        let coeff = poly.coeffs[i];
+        if coeff != 0 && coeff != 1 {
+            return Err(Error::EncodingError(format!("Coefficient out of range for d=1: {}", coeff)));
+        }
+        
+        if coeff == 1 {
+            result[i / 8] |= 1 << (i % 8);
+        }
+    }
+    
+    Ok(result)
+}
+
+/// Decode a polynomial from bytes (d = 1)
+fn byte_decode1(bytes: &[u8]) -> Result<Polynomial> {
+    if bytes.len() < 32 {
+        return Err(Error::EncodingError(format!(
+            "Input too short: expected at least 32 bytes, got {}",
+            bytes.len()
+        )));
+    }
+    
+    let mut poly = Polynomial::new();
+    
+    for i in 0..256 {
+        if (bytes[i / 8] >> (i % 8)) & 1 == 1 {
+            poly.coeffs[i] = 1;
+        } else {
+            poly.coeffs[i] = 0;
+        }
+    }
+    
+    Ok(poly)
+}
+
+/// Pack polynomial coefficients into a bit array
+/// This packs coefficients in the range [-a, a] into bits
+fn bit_pack(poly: &Polynomial, a: i32, b: i32) -> Result<Vec<u8>> {
+    // Total range is [-a, b]
+    let total_range = (a + b) as u32 + 1;
+    let bits_per_coeff = aux::ceil_log2(total_range);
+    
+    // Calculate the size of the resulting byte array
+    let bytes_needed = (256 * bits_per_coeff as usize + 7) / 8;
+    let mut result = vec![0u8; bytes_needed];
+    
+    // Convert coefficients to unsigned range [0, a+b]
+    let mut bits = Vec::with_capacity(256 * bits_per_coeff as usize);
+    
+    for i in 0..256 {
+        let coeff = poly.coeffs[i];
+        if coeff < -a || coeff > b {
+            return Err(Error::EncodingError(format!("Coefficient out of range: {}", coeff)));
+        }
+        
+        // Map [-a, b] to [0, a+b]
+        let mapped = (coeff + a) as u32;
+        
+        // Store in bits_per_coeff bits
+        for j in 0..bits_per_coeff {
+            bits.push(((mapped >> j) & 1) as u8);
+        }
+    }
+    
+    // Pack bits into bytes
+    for i in 0..bytes_needed {
+        let mut byte = 0u8;
+        for j in 0..8 {
+            if i * 8 + j < bits.len() {
+                byte |= bits[i * 8 + j] << j;
+            }
+        }
+        result[i] = byte;
+    }
+    
+    Ok(result)
+}
+
+/// Unpack a bit array into polynomial coefficients
+/// This unpacks bits into coefficients in the range [-a, b]
+fn bit_unpack(bytes: &[u8], a: i32, b: i32) -> Result<Polynomial> {
+    // Total range is [-a, b]
+    let total_range = (a + b) as u32 + 1;
+    let bits_per_coeff = aux::ceil_log2(total_range);
+    
+    // Calculate the number of bytes needed
+    let bytes_needed = (256 * bits_per_coeff as usize + 7) / 8;
+    
+    if bytes.len() < bytes_needed {
+        return Err(Error::EncodingError(format!(
+            "Input too short: expected at least {} bytes, got {}",
+            bytes_needed, bytes.len()
+        )));
+    }
+    
+    // Convert bytes to bits
+    let bits = aux::bytes_to_bits(&bytes[0..bytes_needed]);
+    
+    // Create a new polynomial
+    let mut poly = Polynomial::new();
+    
+    // Extract coefficients from bits
+    for i in 0..256 {
+        let start = i * bits_per_coeff as usize;
+        
+        if start + bits_per_coeff as usize > bits.len() {
+            return Err(Error::EncodingError("Not enough bits for polynomial".to_string()));
+        }
+        
+        let mut mapped = 0u32;
+        for j in 0..bits_per_coeff as usize {
+            mapped |= (bits[start + j] as u32) << j;
+        }
+        
+        if mapped > (a + b) as u32 {
+            return Err(Error::EncodingError(format!("Decoded value out of range: {}", mapped)));
+        }
+        
+        // Map [0, a+b] back to [-a, b]
+        poly.coeffs[i] = mapped as i32 - a;
+    }
+    
+    Ok(poly)
+}
+
+/// Compress a polynomial according to FIPS 203
+/// This implements the Compress_d function from the standard
 fn compress(poly: &Polynomial, d: usize) -> Result<Polynomial> {
     let mut result = Polynomial::new();
+    let q = 8380417; // ML-KEM modulus (q)
+    
     for i in 0..256 {
         let value = poly.coeffs[i];
         // FIPS 203 formula: Compress_d(x) = ⌈(2^d/q) · x⌋ mod 2^d
-        let compressed = ((((1 << d) as i64 * value as i64) + (8380417 / 2) as i64) / 8380417) % (1 << d) as i64;
+        let compressed = ((((1 << d) as i64 * value as i64) + (q / 2) as i64) / q as i64) % (1 << d) as i64;
         result.coeffs[i] = compressed as i32;
     }
+    
     Ok(result)
 }
 
+/// Decompress a polynomial according to FIPS 203
+/// This implements the Decompress_d function from the standard
+fn decompress(poly: &Polynomial, d: usize) -> Result<Polynomial> {
+    let mut result = Polynomial::new();
+    let q = 8380417; // ML-KEM modulus (q)
+    
+    for i in 0..256 {
+        let value = poly.coeffs[i];
+        if value < 0 || value >= (1 << d) {
+            return Err(Error::EncodingError(format!("Value out of range for Decompress_{}: {}", d, value)));
+        }
+        
+        // FIPS 203 formula: Decompress_d(y) = ⌈(q/2^d) · y⌋
+        let decompressed = ((q as i64 * value as i64) + (1 << (d - 1)) as i64) >> d;
+        result.coeffs[i] = decompressed as i32;
+    }
+    
+    Ok(result)
+}
+
+/// Compress a vector of polynomials
 fn compress_vector(polys: &[Polynomial], d: usize) -> Result<Vec<Polynomial>> {
     let mut result = Vec::with_capacity(polys.len());
     for poly in polys {
@@ -593,17 +803,7 @@ fn compress_vector(polys: &[Polynomial], d: usize) -> Result<Vec<Polynomial>> {
     Ok(result)
 }
 
-fn decompress(poly: &Polynomial, d: usize) -> Result<Polynomial> {
-    let mut result = Polynomial::new();
-    for i in 0..256 {
-        let value = poly.coeffs[i];
-        // FIPS 203 formula: Decompress_d(y) = ⌈(q/2^d) · y⌋
-        let decompressed = ((8380417 as i64 * value as i64) + (1 << (d - 1)) as i64) >> d;
-        result.coeffs[i] = decompressed as i32;
-    }
-    Ok(result)
-}
-
+/// Decompress a vector of polynomials
 fn decompress_vector(polys: &[Polynomial], d: usize) -> Result<Vec<Polynomial>> {
     let mut result = Vec::with_capacity(polys.len());
     for poly in polys {
@@ -612,10 +812,12 @@ fn decompress_vector(polys: &[Polynomial], d: usize) -> Result<Vec<Polynomial>> 
     Ok(result)
 }
 
+/// Special case of compress with d=1 for message encoding
 fn compress1(poly: Polynomial) -> Result<Polynomial> {
     compress(&poly, 1)
 }
 
+/// Special case of decompress with d=1 for message decoding
 fn decompress1(poly: Polynomial) -> Result<Polynomial> {
     decompress(&poly, 1)
 }
