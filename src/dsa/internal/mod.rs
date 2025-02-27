@@ -437,40 +437,41 @@ match hash_function {
 
 /// Sample a polynomial with exactly tau +/-1 coefficients
 fn sample_in_ball(seed: &[u8], tau: usize) -> Result<Polynomial> {
-let mut poly = Polynomial::new();
-let mut h = [0u8; 64];
-
-// Create bit array for signs
-let mut ctx = hash::SHAKE256Context::init();
-ctx.absorb(seed);
-h.copy_from_slice(&ctx.squeeze(8));
-
-let mut bits = hash::aux::bytes_to_bits(&h);
-
-// Fisher-Yates shuffle to select positions
-for i in (256 - tau)..256 {
-    // Get random index j in [0..i]
-    let mut j = 0;
-    let mut valid_j = false;
+    let mut poly = Polynomial::new();
     
-    while !valid_j {
-        let bytes = ctx.squeeze(1);
-        j = bytes[0] as usize;
-        if j <= i {
-            valid_j = true;
-        }
+    // Use SHAKE256 to generate randomness
+    let mut ctx = hash::SHAKE256Context::init();
+    ctx.absorb(seed);
+    
+    // Generate sign bits
+    let sign_bytes = ctx.squeeze(32);
+    let sign_bits = bytes_to_bits(&sign_bytes);
+    
+    // Use Fisher-Yates algorithm to select positions
+    let mut indices = Vec::with_capacity(256);
+    for i in 0..256 {
+        indices.push(i);
     }
     
-    // Swap positions i and j
-    poly.coeffs[i] = poly.coeffs[j];
+    for i in (256 - tau)..256 {
+        // Get random index j in [0..i]
+        let bytes = ctx.squeeze(2);
+        let j = ((bytes[0] as u16) | ((bytes[1] as u16) << 8)) % (i as u16 + 1);
+        
+        // Swap positions i and j
+        indices.swap(i, j as usize);
+    }
     
-    // Set position j to +/-1 based on sign bit
-    let sign_bit = bits[i + tau - 256];
-    poly.coeffs[j] = if sign_bit == 0 { 1 } else { -1 };
+    // Set the selected positions to +/-1
+    for i in 0..tau {
+        let idx = indices[256 - tau + i];
+        let sign_bit = sign_bits[i % sign_bits.len()];
+        poly.coeffs[idx] = if sign_bit == 0 { 1 } else { -1 };
+    }
+    
+    Ok(poly)
 }
 
-Ok(poly)
-}
 
 /// Expand matrix A from seed
 fn expand_a(rho: &[u8], k: usize, l: usize) -> Result<Vec<Vec<Polynomial>>> {
@@ -660,54 +661,97 @@ for i in 0..256 {
 Ok((r1, r0))
 }
 
-/// Make hint for high bits
-fn make_hint(z: &Polynomial, ct0: &Polynomial, alpha: usize) -> Result<Polynomial> {
-let mut h = Polynomial::new();
-
-for i in 0..256 {
-    let (z1, _) = decompose_coefficient(z.coeffs[i], alpha);
-    let (v1, _) = decompose_coefficient(z.coeffs[i] - ct0.coeffs[i], alpha);
+/// Make hint for high bits according to FIPS 204
+fn make_hint(w_prime: &Polynomial, ct0: &Polynomial, gamma2: usize) -> Result<Polynomial> {
+    let mut h = Polynomial::new();
     
-    h.coeffs[i] = if z1 != v1 { 1 } else { 0 };
-}
-
-Ok(h)
-}
-
-/// Use hint to recover high bits
-fn use_hint(h: &Polynomial, r: &Polynomial, alpha: usize) -> Result<Polynomial> {
-let mut w1 = Polynomial::new();
-
-for i in 0..256 {
-    let (r1, r0) = decompose_coefficient(r.coeffs[i], alpha);
-    
-    if h.coeffs[i] == 1 {
-        let d = if r0 > 0 { 1 } else { -1 };
-        w1.coeffs[i] = (r1 + d) % ((8380417 - 1) / (2 * alpha as i32));
-    } else {
-        w1.coeffs[i] = r1;
+    for i in 0..256 {
+        // Decompose coefficients
+        let (w1, _) = decompose_coefficient(w_prime.coeffs[i], gamma2);
+        let (v1, _) = decompose_coefficient(w_prime.coeffs[i] - ct0.coeffs[i], gamma2);
+        
+        // If high bits differ, set hint to 1
+        h.coeffs[i] = if w1 != v1 { 1 } else { 0 };
     }
+    
+    Ok(h)
 }
 
-Ok(w1)
+/// Use hint to recover high bits according to FIPS 204
+fn use_hint(h: &Polynomial, r: &Polynomial, gamma2: usize) -> Result<Polynomial> {
+    let mut w1 = Polynomial::new();
+    let q = 8380417; // ML-DSA modulus (q)
+    
+    for i in 0..256 {
+        // Decompose coefficient
+        let (r1, r0) = decompose_coefficient(r.coeffs[i], gamma2);
+        
+        // Use hint to adjust high bits
+        if h.coeffs[i] == 1 {
+            let d = if r0 > 0 { 1 } else { -1 };
+            w1.coeffs[i] = (r1 + d) % ((q - 1) / (2 * gamma2 as i32));
+        } else {
+            w1.coeffs[i] = r1;
+        }
+    }
+    
+    Ok(w1)
 }
 
-/// Decompose a single coefficient
+/// Convert a byte array to a bit array
+fn bytes_to_bits(bytes: &[u8]) -> Vec<u8> {
+    let mut bits = Vec::with_capacity(bytes.len() * 8);
+    for &byte in bytes {
+        for j in 0..8 {
+            bits.push((byte >> j) & 1);
+        }
+    }
+    bits
+}
+
+/// Convert a bit array to a byte array
+fn bits_to_bytes(bits: &[u8]) -> Vec<u8> {
+    let num_bytes = (bits.len() + 7) / 8;
+    let mut bytes = vec![0u8; num_bytes];
+    
+    for (i, &bit) in bits.iter().enumerate() {
+        if bit != 0 {
+            bytes[i / 8] |= 1 << (i % 8);
+        }
+    }
+    
+    bytes
+}
+
+
+/// Decompose a single coefficient according to FIPS 204
 fn decompose_coefficient(r: i32, alpha: usize) -> (i32, i32) {
-// Centered remainder modulo 2*alpha
-let mut r0 = r % (2 * alpha as i32);
-if r0 > alpha as i32 {
-    r0 -= 2 * alpha as i32;
-} else if r0 < -(alpha as i32) {
-    r0 += 2 * alpha as i32;
+    // Centered remainder modulo 2*alpha
+    let mut r0 = r % (2 * alpha as i32);
+    if r0 > alpha as i32 {
+        r0 -= 2 * alpha as i32;
+    } else if r0 < -(alpha as i32) {
+        r0 += 2 * alpha as i32;
+    }
+    
+    // Quotient
+    let r1 = (r - r0) / (2 * alpha as i32);
+    
+    (r1, r0)
 }
 
-// Quotient
-let r1 = (r - r0) / (2 * alpha as i32);
-
-(r1, r0)
+/// Count the number of 1's in a hint polynomial vector
+fn count_ones(hint: &[Polynomial]) -> usize {
+    let mut count = 0;
+    for poly in hint {
+        for &coeff in &poly.coeffs {
+            if coeff == 1 {
+                count += 1;
+            }
+        }
+    }
+    count
 }
-
 /// Rejection sampling in NTT domain
 fn reject_sample_ntt(seed: &[u8], ntt_ctx: &NTTContext) -> Result<Polynomial> {
 let mut poly = Polynomial::new();
@@ -1111,66 +1155,111 @@ fn decode_poly(bytes: &[u8], bits_per_coeff: usize) -> Result<Polynomial> {
     Ok(poly)
 }
 
-/// Encode hint
+/// Encode hint for ML-DSA according to FIPS 204
 fn encode_hint(h: &[Polynomial], omega: usize) -> Result<Vec<u8>> {
     let k = h.len();
-    let mut result = vec![0u8; omega + k];
+    let mut result = Vec::with_capacity(omega + k);
     
-    let mut idx = 0;
-    
-    // Count nonzero positions
+    // First, gather all positions where coefficients are 1
+    let mut positions = Vec::new();
     for i in 0..k {
         for j in 0..256 {
             if h[i].coeffs[j] == 1 {
-                if idx >= omega {
-                    return Err(Error::EncodingError("Too many ones in hint".to_string()));
-                }
-                result[idx] = j as u8;
-                idx += 1;
+                positions.push((i, j));
             }
         }
-        result[omega + i] = idx as u8;
+    }
+    
+    // Check if number of 1s is within limit
+    if positions.len() > omega {
+        return Err(Error::EncodingError(format!(
+            "Too many ones in hint: {}, maximum allowed: {}", positions.len(), omega
+        )));
+    }
+    
+    // Sort positions to ensure canonical ordering
+    positions.sort_by(|a, b| {
+        if a.0 != b.0 {
+            a.0.cmp(&b.0)
+        } else {
+            a.1.cmp(&b.1)
+        }
+    });
+    
+    // Store positions in the result
+    let mut idx = 0;
+    for (i, j) in positions {
+        if idx >= omega {
+            break;
+        }
+        result.push(j as u8);
+        idx += 1;
+    }
+    
+    // Fill remaining positions with zeros
+    while idx < omega {
+        result.push(0);
+        idx += 1;
+    }
+    
+    // Store number of ones per polynomial
+    for i in 0..k {
+        let mut count = 0;
+        for (poly_idx, _) in &positions {
+            if *poly_idx == i {
+                count += 1;
+            }
+        }
+        result.push(count);
     }
     
     Ok(result)
 }
 
-/// Decode hint
+/// Decode hint for ML-DSA according to FIPS 204
 fn decode_hint(bytes: &[u8], k: usize, omega: usize) -> Result<Vec<Polynomial>> {
     if bytes.len() < omega + k {
         return Err(Error::InvalidSignature);
     }
     
+    // Initialize polynomials with zeros
     let mut h = Vec::with_capacity(k);
     for _ in 0..k {
         h.push(Polynomial::new());
     }
     
-    let mut idx = 0;
+    // Extract position bytes and count bytes
+    let positions = &bytes[0..omega];
+    let counts = &bytes[omega..omega + k];
     
+    // Validate that counts sum to at most omega
+    let total_count: usize = counts.iter().map(|&c| c as usize).sum();
+    if total_count > omega {
+        return Err(Error::InvalidSignature);
+    }
+    
+    // Parse hints using counts to determine which positions go with which polynomial
+    let mut pos_idx = 0;
     for i in 0..k {
-        if bytes[omega + i] < idx || bytes[omega + i] > omega as u8 {
-            return Err(Error::InvalidSignature);
-        }
-        
-        let first = idx;
-        while idx < bytes[omega + i] as usize {
-            if idx > first && bytes[idx - 1] >= bytes[idx] {
+        let count = counts[i] as usize;
+        for j in 0..count {
+            if pos_idx >= omega {
                 return Err(Error::InvalidSignature);
             }
             
-            let pos = bytes[idx] as usize;
+            let pos = positions[pos_idx] as usize;
             if pos >= 256 {
                 return Err(Error::InvalidSignature);
             }
             
             h[i].coeffs[pos] = 1;
-            idx += 1;
+            pos_idx += 1;
         }
     }
     
-    for i in idx..omega {
-        if bytes[i] != 0 {
+    // Ensure remaining positions are 0
+    for i in pos_idx..omega {
+        if positions[i] != 0 {
             return Err(Error::InvalidSignature);
         }
     }
@@ -1178,17 +1267,45 @@ fn decode_hint(bytes: &[u8], k: usize, omega: usize) -> Result<Vec<Polynomial>> 
     Ok(h)
 }
 
-/// Encode w1 for challenge hash
+/// Encode the w1 component for challenge hash according to FIPS 204
 fn encode_w1(w1: &[Polynomial]) -> Result<Vec<u8>> {
     let k = w1.len();
-    let bits_per_coeff = 4; // High bits typically use 4 bits per coefficient
+    // For high bits, we typically use 4 bits per coefficient (based on gamma2 range)
+    let bits_per_coeff = 4; 
     
+    // Calculate number of bytes needed per polynomial
     let bytes_per_poly = (256 * bits_per_coeff + 7) / 8;
     let mut result = Vec::with_capacity(k * bytes_per_poly);
     
     for i in 0..k {
-        let encoded = encode_poly(&w1[i], bits_per_coeff as u32)?;
-        result.extend_from_slice(&encoded);
+        // Convert polynomial coefficients to bits
+        let mut bits = Vec::with_capacity(256 * bits_per_coeff);
+        
+        for j in 0..256 {
+            let coeff = w1[i].coeffs[j] as u32;
+            // We need to ensure the coefficient is within the expected range
+            if coeff >= (1 << bits_per_coeff) {
+                return Err(Error::EncodingError(format!(
+                    "Coefficient out of range for w1 encoding: {}", coeff
+                )));
+            }
+            
+            // Store coefficient in bits_per_coeff bits
+            for b in 0..bits_per_coeff {
+                bits.push(((coeff >> b) & 1) as u8);
+            }
+        }
+        
+        // Pack bits into bytes
+        for b in 0..(bits.len() + 7) / 8 {
+            let mut byte = 0u8;
+            for j in 0..8 {
+                if b * 8 + j < bits.len() {
+                    byte |= bits[b * 8 + j] << j;
+                }
+            }
+            result.push(byte);
+        }
     }
     
     Ok(result)
