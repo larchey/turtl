@@ -11,7 +11,7 @@ use rand_chacha::ChaCha20Rng;
 
 pub fn ntt_forward_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("NTT Forward Transform");
-    let ntt_ctx = NTTContext::new();
+    let ntt_ctx = NTTContext::new(NTTType::MLDSA);
     
     // Test with random polynomials
     let mut rng = ChaCha20Rng::seed_from_u64(0xdeadbeef);
@@ -47,7 +47,7 @@ pub fn ntt_forward_benchmark(c: &mut Criterion) {
 
 pub fn ntt_inverse_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("NTT Inverse Transform");
-    let ntt_ctx = NTTContext::new();
+    let ntt_ctx = NTTContext::new(NTTType::MLDSA);
     
     // Test with random polynomials
     let mut rng = ChaCha20Rng::seed_from_u64(0xdeadbeef);
@@ -88,7 +88,7 @@ pub fn ntt_inverse_benchmark(c: &mut Criterion) {
 
 pub fn ntt_multiply_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("NTT Polynomial Multiplication");
-    let ntt_ctx = NTTContext::new();
+    let ntt_ctx = NTTContext::new(NTTType::MLDSA);
     
     // Test with random polynomials
     let mut rng = ChaCha20Rng::seed_from_u64(0xdeadbeef);
@@ -111,7 +111,7 @@ pub fn ntt_multiply_benchmark(c: &mut Criterion) {
 
 pub fn ntt_roundtrip_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("NTT Complete Roundtrip");
-    let ntt_ctx = NTTContext::new();
+    let ntt_ctx = NTTContext::new(NTTType::MLDSA);
     
     // Test with random polynomials
     let mut rng = ChaCha20Rng::seed_from_u64(0xdeadbeef);

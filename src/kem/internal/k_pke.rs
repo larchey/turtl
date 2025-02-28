@@ -7,6 +7,7 @@ use crate::error::{Error, Result};
 use crate::kem::ParameterSet;
 use crate::common::{ntt::NTTContext, poly::Polynomial, hash, sample::SampleInBall};
 use zeroize::Zeroize;
+use crate::common::ntt::NTTType;
 
 /// Generate the key components for K-PKE
 pub(crate) fn generate_key_components(
@@ -18,7 +19,7 @@ pub(crate) fn generate_key_components(
     let eta1 = parameter_set.eta1();
     
     // Create NTT context
-    let ntt_ctx = NTTContext::new();
+    let ntt_ctx = NTTContext::new(NTTType::MLKEM);
     
     // Generate matrix A
     let mut matrix_a = Vec::with_capacity(k);
@@ -64,7 +65,7 @@ pub(crate) fn compute_public_t(
     s2: &[Polynomial]
 ) -> Result<Vec<Polynomial>> {
     let k = matrix_a.len();
-    let ntt_ctx = NTTContext::new();
+    let ntt_ctx = NTTContext::new(NTTType::MLKEM); 
     
     // NTT transform s1
     let mut s1_ntt = Vec::with_capacity(k);
@@ -241,7 +242,7 @@ pub(crate) fn encrypt(
     let (t, rho) = decode_public_key(public_key, parameter_set)?;
     
     // 4-8. Generate matrix A
-    let ntt_ctx = NTTContext::new();
+    let ntt_ctx = NTTContext::new(NTTType::MLKEM); 
     let matrix_a = expand_a(&rho, k)?;
     
     // 9-12. Generate vector y
@@ -343,7 +344,7 @@ pub(crate) fn decrypt(
     let s = decode_s_from_private_key(private_key, parameter_set)?;
     
     // 6. Compute w = v' - s^T * u'
-    let ntt_ctx = NTTContext::new();
+    let ntt_ctx = NTTContext::new(NTTType::MLKEM); 
     let mut w = v_prime.clone();
     
     // Transform u' to NTT domain
@@ -438,7 +439,7 @@ fn sample_cbd(seed: &[u8], eta: usize) -> Result<Polynomial> {
 
 /// Expand matrix A
 fn expand_a(rho: &[u8], k: usize) -> Result<Vec<Vec<Polynomial>>> {
-    let ntt_ctx = NTTContext::new();
+    let ntt_ctx = NTTContext::new(NTTType::MLKEM); 
     
     let mut matrix_a = Vec::with_capacity(k);
     for i in 0..k {

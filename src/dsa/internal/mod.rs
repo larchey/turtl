@@ -7,6 +7,7 @@ use crate::error::{Error, Result};
 use crate::dsa::{ParameterSet, PublicKey, PrivateKey, Signature, HashFunction};
 use crate::common::{ntt::NTTContext, poly::Polynomial, hash, sample::SampleInBall};
 use zeroize::Zeroize;
+use crate::common::ntt::NTTType;
 
 pub mod aux;
 
@@ -48,7 +49,7 @@ pub(crate) fn ml_dsa_keygen_internal(
     key_seed.copy_from_slice(&expanded[96..128]);
     
     // 2-4. Generate matrix A, vectors s1 and s2
-    let ntt_ctx = NTTContext::new();
+    let ntt_ctx = NTTContext::new(NTTType::MLDSA);
     let matrix_a = expand_a(&rho, k, l)?;
     let (s1, s2) = expand_s(&sigma, l, k, eta)?;
     
@@ -85,7 +86,7 @@ pub(crate) fn ml_dsa_sign_internal(
     let omega = parameter_set.omega();
     
     // Create NTT context
-    let ntt_ctx = NTTContext::new();
+    let ntt_ctx = NTTContext::new(NTTType::MLDSA);
     
     // Generate matrix A
     let matrix_a = expand_a(&rho, k, l)?;
@@ -264,8 +265,8 @@ pub(crate) fn ml_dsa_verify_internal(
     }
     
     // Create NTT context
-    let ntt_ctx = NTTContext::new();
-    
+    let ntt_ctx = NTTContext::new(NTTType::MLDSA);
+
     // Generate matrix A
     let matrix_a = expand_a(&rho, k, l)?;
     
@@ -424,7 +425,7 @@ fn get_hash_function_oid(hash_function: HashFunction) -> Vec<u8> {
 /// Generate matrix A from seed
 fn expand_a(rho: &[u8], k: usize, l: usize) -> Result<Vec<Vec<Polynomial>>> {
     let mut matrix_a = Vec::with_capacity(k);
-    let ntt_ctx = NTTContext::new();
+    let ntt_ctx = NTTContext::new(NTTType::MLDSA);
 
     for i in 0..k {
         let mut row = Vec::with_capacity(l);
