@@ -430,7 +430,10 @@ fn expand_a(rho: &[u8], k: usize, l: usize) -> Result<Vec<Vec<Polynomial>>> {
     for i in 0..k {
         let mut row = Vec::with_capacity(l);
         for j in 0..l {
-            let seed = [rho, &[j as u8, i as u8]].concat();
+            let mut seed = Vec::with_capacity(rho.len() + 2);
+            seed.extend_from_slice(rho);
+            seed.push(j as u8);
+            seed.push(i as u8);
             let a_ij = reject_sample_ntt(&seed, &ntt_ctx)?;
             row.push(a_ij);
         }

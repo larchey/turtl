@@ -26,7 +26,10 @@ pub(crate) fn generate_key_components(
     for i in 0..k {
         let mut row = Vec::with_capacity(k);
         for j in 0..k {
-            let seed = [rho, &[j as u8, i as u8]].concat();
+            let mut seed = Vec::with_capacity(rho.len() + 2);
+            seed.extend_from_slice(rho);
+            seed.push(j as u8);
+            seed.push(i as u8);
             let a_ij = reject_sample_ntt(&seed, &ntt_ctx)?;
             row.push(a_ij);
         }
@@ -170,7 +173,7 @@ pub(crate) fn encode_private_key(
     let d = 13; // The d parameter from FIPS 203
     
     // Calculate private key size
-    let s1_s2_size = k * 32 * bitlen(2 * eta1);
+    let s1_s2_size = k * 32 * bitlen((2 * eta1) as u32);
     let t0_size = k * 32 * d;
     let sk_size = 32 + 32 + 64 + s1_s2_size + t0_size;
     
@@ -445,7 +448,10 @@ fn expand_a(rho: &[u8], k: usize) -> Result<Vec<Vec<Polynomial>>> {
     for i in 0..k {
         let mut row = Vec::with_capacity(k);
         for j in 0..k {
-            let seed = [rho, &[j as u8, i as u8]].concat();
+            let mut seed = Vec::with_capacity(rho.len() + 2);
+            seed.extend_from_slice(rho);
+            seed.push(j as u8);
+            seed.push(i as u8);
             let a_ij = reject_sample_ntt(&seed, &ntt_ctx)?;
             row.push(a_ij);
         }
@@ -491,7 +497,7 @@ fn decode_s_from_private_key(
     
     // s is stored after rho, key_seed, and tr
     let s_start = 32 + 32 + 64;
-    let s_size = 32 * bitlen(2 * eta1);
+    let s_size = 32 * bitlen((2 * eta1) as u32);
     
     let mut s = Vec::with_capacity(k);
     

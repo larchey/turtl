@@ -142,7 +142,8 @@ impl SharedSecret {
 
 /// Generate a new ML-KEM key pair
 pub fn key_gen(parameter_set: ParameterSet) -> Result<(PublicKey, PrivateKey)> {
-    keypair::generate(parameter_set)
+    let keypair = keypair::generate(parameter_set)?;
+    Ok((keypair.public_key(), keypair.private_key()))
 }
 
 /// Encapsulate a shared secret using a public key
