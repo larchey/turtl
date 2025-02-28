@@ -9,6 +9,8 @@ use crate::common::{ntt::NTTContext, poly::Polynomial, hash, sample::SampleInBal
 use zeroize::Zeroize;
 use crate::common::ntt::NTTType;
 
+use super::aux;
+
 /// Generate the key components for K-PKE
 pub(crate) fn generate_key_components(
     rho: &[u8; 32],
@@ -416,6 +418,12 @@ fn reject_sample_ntt(seed: &[u8], ntt_ctx: &NTTContext) -> Result<Polynomial> {
     
     // Already in NTT domain
     Ok(poly)
+}
+
+
+fn byte_to_bits(bytes: &[u8]) -> Result<Vec<u8>> {
+    let bits = aux::bytes_to_bits(bytes);
+    Ok(bits)
 }
 
 /// Sample from the centered binomial distribution

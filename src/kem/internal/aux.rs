@@ -44,7 +44,8 @@ pub(crate) fn montgomery_reduce(a: i64) -> i32 {
     const Q: u32 = 8380417;
     
     let mut t = ((a as u32) as u64 * QINV as u64) as u32;
-    t = (a as i64 - (t as i64 * Q as i64)) >> 32;
+    let temp = (a as i64 - (t as i64 * Q as i64)) >> 32;
+    t = temp as u32;
     t as i32
 }
 
