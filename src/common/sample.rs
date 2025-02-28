@@ -182,12 +182,12 @@ impl RejectionSampler {
             let b2 = byte >> 4;
             
             // Use rejection sampling
-            if b1 < 15 - 5 + 2*eta + 1 {
+            if usize::from(b1) < 15 - 5 + 2*eta + 1 {
                 poly.coeffs[j] = (b1 as i32) - (eta as i32);
                 j += 1;
             }
             
-            if j < 256 && b2 < 15 - 5 + 2*eta + 1 {
+            if j < 256 && usize::from(b2) < 15 - 5 + 2*eta + 1 {
                 poly.coeffs[j] = (b2 as i32) - (eta as i32);
                 j += 1;
             }

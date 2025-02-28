@@ -257,7 +257,9 @@ pub(crate) fn encrypt(
     // 9-12. Generate vector y
     let mut y = Vec::with_capacity(k);
     for i in 0..k {
-        let seed = [randomness, &[counter]].concat();
+        let mut seed = Vec::with_capacity(randomness.len() + 1);
+        seed.extend_from_slice(randomness);
+        seed.push(counter);
         counter += 1;
         let y_i = sample_cbd(seed.as_slice(), eta1)?;
         y.push(y_i);
@@ -266,14 +268,18 @@ pub(crate) fn encrypt(
     // 13-16. Generate vector e1
     let mut e1 = Vec::with_capacity(k);
     for i in 0..k {
-        let seed = [randomness, &[counter]].concat();
+        let mut seed = Vec::with_capacity(randomness.len() + 1);
+        seed.extend_from_slice(randomness);
+        seed.push(counter);
         counter += 1;
         let e1_i = sample_cbd(seed.as_slice(), eta2)?;
         e1.push(e1_i);
     }
     
     // 17. Generate e2
-    let seed = [randomness, &[counter]].concat();
+    let mut seed = Vec::with_capacity(randomness.len() + 1);
+    seed.extend_from_slice(randomness);
+    seed.push(counter);
     let e2 = sample_cbd(seed.as_slice(), eta2)?;
     
     // 18. NTT transform y
@@ -322,7 +328,7 @@ pub(crate) fn encrypt(
     
     // 24. Encode and return ciphertext
     let c1 = byte_encode_vector(&u_compressed, du)?;
-    let c2 = byte_encode(&v_compressed, dv)?;
+    let c2 = byte_encode(&v_compressed, dv as u32)?;
     
     let mut ciphertext = Vec::new();
     ciphertext.extend(c1);
@@ -347,7 +353,7 @@ pub(crate) fn decrypt(
     let c2 = &ciphertext[c1_len..];
     
     let u_prime = decompress_vector(&byte_decode_vector(c1, du)?, du)?;
-    let v_prime = decompress(&byte_decode(c2, dv)?, dv)?;
+    let v_prime = decompress(&byte_decode(c2, dv as u32)?, dv as u32)?;
     
     // 5. Decode private key
     let s = decode_s_from_private_key(private_key, parameter_set)?;

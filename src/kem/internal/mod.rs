@@ -74,7 +74,10 @@ pub(crate) fn ml_kem_encaps_internal(
     
     // 1. Derive key K and randomness r from message and hash of public key
     let public_key_hash = hash::h_function(public_key_bytes, 32);
-    let (k, r) = hash::g_function(&[message, &public_key_hash].concat());
+    let mut msg_data = Vec::with_capacity(message.len() + public_key_hash.len());
+    msg_data.extend_from_slice(message);
+    msg_data.extend_from_slice(&public_key_hash);
+    let (k, r) = hash::g_function(&msg_data);
     
     // 2. Encrypt message using PKE with derived randomness
     let ciphertext = k_pke::encrypt(public_key_bytes, message, &r, parameter_set)?;
@@ -97,8 +100,11 @@ pub(crate) fn ml_kem_decaps_internal(
     let m_prime = k_pke::decrypt(&dk_pke, ciphertext, parameter_set)?;
     
     // 6. Re-derive K' and r'
-    let (k_prime, r_prime) = hash::g_function(&[&m_prime, &h].concat());
-    
+    let mut prime_data = Vec::with_capacity(m_prime.len() + h.len());
+    prime_data.extend_from_slice(&m_prime);
+    prime_data.extend_from_slice(&h);
+    let (k_prime, r_prime) = hash::g_function(&prime_data);
+        
     // 7-8. Alternative K in case of failure
     let k_bar = hash::h_function(&[&z, ciphertext].concat(), 32);
     

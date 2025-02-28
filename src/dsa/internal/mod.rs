@@ -38,7 +38,10 @@ pub(crate) fn ml_dsa_keygen_internal(
     
     // 1. Expand the seed to get rho, sigma, and K
     let domain_bytes = [k as u8, l as u8];
-    let expanded = hash::h_function(&[seed, &domain_bytes].concat(), 128);
+    let mut data = Vec::with_capacity(seed.len() + domain_bytes.len());
+    data.extend_from_slice(seed);
+    data.extend_from_slice(&domain_bytes);
+    let expanded = hash::h_function(&data, 128);
     
     let mut rho = [0u8; 32];
     let mut sigma = [0u8; 64];
@@ -116,7 +119,11 @@ pub(crate) fn ml_dsa_sign_internal(
     let mu = hash::h_function(&[&tr, message].concat(), 64);
     
     // Generate rho' = H(K || rnd || mu)
-    let rho_prime = hash::h_function(&[&key, rnd, &mu].concat(), 64);
+    let mut rho_data = Vec::new();
+    rho_data.extend_from_slice(&key);
+    rho_data.extend_from_slice(rnd);
+    rho_data.extend_from_slice(&mu);
+    let rho_prime = hash::h_function(&rho_data, 64);
     
     // Initialize counter
     let mut kappa = 0u16;
@@ -141,7 +148,10 @@ pub(crate) fn ml_dsa_sign_internal(
         
         // Compute c = H(mu || w1)
         let w1_encoded = encode_w1(&w1)?;
-        let c_tilde = hash::h_function(&[&mu, &w1_encoded].concat(), parameter_set.lambda() / 4);
+        let mut c_data = Vec::new();
+        c_data.extend_from_slice(&mu);
+        c_data.extend_from_slice(&w1_encoded);
+        let c_tilde = hash::h_function(&c_data, parameter_set.lambda() / 4);
         
         // Sample c from challenge space
         let c = sample_in_ball(&c_tilde, tau)?;
@@ -161,7 +171,7 @@ pub(crate) fn ml_dsa_sign_internal(
         // Check if z is small enough
         let mut z_ok = true;
         for i in 0..l {
-            if z[i].infinity_norm() >= gamma1 - beta {
+            if z[i].infinity_norm() >= (gamma1 - beta) as i32 {
                 z_ok = false;
                 break;
             }
@@ -259,7 +269,7 @@ pub(crate) fn ml_dsa_verify_internal(
     
     // Check if z is small enough
     for i in 0..l {
-        if z[i].infinity_norm() >= gamma1 - beta {
+        if z[i].infinity_norm() >= (gamma1 - beta) as i32 {
             return Ok(false);
         }
     }
@@ -519,12 +529,12 @@ fn sample_bounded_poly(seed: &[u8], eta: usize) -> Result<Polynomial> {
         let b2 = byte >> 4;
         
         // Use rejection sampling
-        if b1 < 15 - 5 + 2*eta + 1 {
+        if usize::from(b1) < 15 - 5 + 2*eta + 1 {
             poly.coeffs[j] = (b1 as i32) - (eta as i32);
             j += 1;
         }
         
-        if j < 256 && b2 < 15 - 5 + 2*eta + 1 {
+        if j < 256 && usize::from(b2) < 15 - 5 + 2*eta + 1 {
             poly.coeffs[j] = (b2 as i32) - (eta as i32);
             j += 1;
         }
@@ -882,7 +892,7 @@ fn encode_hint(h: &[Polynomial], omega: usize) -> Result<Vec<u8>> {
         if idx >= omega {
             break;
         }
-        result.push(j as u8);
+        result.push(*j as u8);
         idx += 1;
     }
     

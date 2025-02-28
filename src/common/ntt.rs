@@ -141,7 +141,7 @@ impl NTTContext {
             NTTType::MLDSA => {
                 // 32-bit Montgomery reduction for ML-DSA
                 let mut t = ((a as u32) as u64 * self.qinv as u64) as u32;
-                t = (a as i64 - (t as i64 * self.modulus as i64)) >> 32;
+                t = ((a as i64 - (t as i64 * self.modulus as i64)) >> 32) as u32;
                 t as i32
             }
         }
