@@ -878,7 +878,7 @@ fn encode_hint(h: &[Polynomial], omega: usize) -> Result<Vec<u8>> {
     
     // Store positions in the result
     let mut idx = 0;
-    for (i, j) in positions {
+    for (i, j) in &positions {
         if idx >= omega {
             break;
         }

@@ -22,7 +22,7 @@ pub enum HashFunction {
 /// Wrapper for SHAKE256 extendable-output function
 pub fn shake256(input: &[u8], output_len: usize) -> Vec<u8> {
     let mut hasher = Shake256::default();
-    hasher.update(input);
+    Update::update(&mut hasher, input);
     let mut reader = hasher.finalize_xof();
     let mut output = vec![0u8; output_len];
     reader.read(&mut output);
@@ -32,7 +32,7 @@ pub fn shake256(input: &[u8], output_len: usize) -> Vec<u8> {
 /// Wrapper for SHAKE128 extendable-output function
 pub fn shake128(input: &[u8], output_len: usize) -> Vec<u8> {
     let mut hasher = Shake128::default();
-    hasher.update(input);
+    Update::update(&mut hasher, input);
     let mut reader = hasher.finalize_xof();
     let mut output = vec![0u8; output_len];
     reader.read(&mut output);
@@ -42,7 +42,7 @@ pub fn shake128(input: &[u8], output_len: usize) -> Vec<u8> {
 /// Wrapper for SHA3-256 hash function
 pub fn sha3_256(input: &[u8]) -> [u8; 32] {
     let mut hasher = Sha3_256::new();
-    hasher.update(input);
+    Update::update(&mut hasher, input);
     let result = hasher.finalize();
     let mut output = [0u8; 32];
     output.copy_from_slice(&result);
@@ -52,7 +52,7 @@ pub fn sha3_256(input: &[u8]) -> [u8; 32] {
 /// Wrapper for SHA3-512 hash function
 pub fn sha3_512(input: &[u8]) -> [u8; 64] {
     let mut hasher = Sha3_512::new();
-    hasher.update(input);
+    Update::update(&mut hasher, input);
     let result = hasher.finalize();
     let mut output = [0u8; 64];
     output.copy_from_slice(&result);

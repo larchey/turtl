@@ -33,7 +33,11 @@ pub(crate) fn ml_kem_keygen_internal(
     
     // 1. Expand the seed to get rho, rho', and K
     let k = parameter_set.k();
-    let expanded = hash::h_function(&[seed, &[k as u8, 0]].concat(), 128);
+    let mut data = Vec::with_capacity(seed.len() + 2);
+    data.extend_from_slice(seed);
+    data.push(k as u8);
+    data.push(0);
+    let expanded = hash::h_function(&data, 128);
     
     let mut rho = [0u8; 32];
     let mut rhoprime = [0u8; 64];
