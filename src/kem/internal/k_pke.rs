@@ -46,7 +46,9 @@ pub(crate) fn generate_key_components(
     
     // Sample s1
     for i in 0..k {
-        let seed = [rhoprime, &[counter]].concat();
+        let mut seed = Vec::with_capacity(rhoprime.len() + 1);
+        seed.extend_from_slice(rhoprime);
+        seed.push(counter);
         counter += 1;
         let s1_i = sample_cbd(seed.as_slice(), eta1)?;
         s1.push(s1_i);
@@ -54,7 +56,9 @@ pub(crate) fn generate_key_components(
     
     // Sample s2
     for i in 0..k {
-        let seed = [rhoprime, &[counter]].concat();
+        let mut seed = Vec::with_capacity(rhoprime.len() + 1);
+        seed.extend_from_slice(rhoprime);
+        seed.push(counter);
         counter += 1;
         let s2_i = sample_cbd(seed.as_slice(), eta1)?;
         s2.push(s2_i);
