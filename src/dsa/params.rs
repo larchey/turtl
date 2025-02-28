@@ -23,6 +23,11 @@ impl ParameterSet {
         }
     }
     
+    /// Get the modulus q for ML-DSA
+    pub fn q(&self) -> i32 {
+        8380417 // Same for all ML-DSA parameter sets per FIPS 204
+    }
+    
     /// Get the value of parameter d (number of dropped bits)
     pub fn d(&self) -> usize {
         13 // Same for all parameter sets

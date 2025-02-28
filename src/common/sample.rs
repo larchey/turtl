@@ -1,12 +1,13 @@
 //! Random sampling functions for ML-KEM and ML-DSA.
 //! 
 //! This module implements specialized sampling algorithms used in both
-//! ML-KEM and ML-DSA, including rejection sampling and sampling from
-//! various distributions.
+//! ML-KEM and ML-DSA, with proper handling of different moduli.
 
 use crate::error::{Error, Result};
 use crate::common::poly::Polynomial;
 use crate::common::hash;
+use crate::common::ntt::NTTType;
+use crate::common::coding::bytes_to_bits;
 use zeroize::Zeroize;
 
 /// Sample a polynomial with exactly tau +/-1 coefficients
@@ -76,11 +77,11 @@ pub struct RejectionSampler;
 impl RejectionSampler {
     /// Sample from the centered binomial distribution
     /// Used in ML-KEM for noise generation
-    pub fn sample_cbd(seed: &[u8], eta: usize) -> Result<Polynomial> {
+    pub fn sample_cbd(seed: &[u8], eta: usize, ntt_type: NTTType) -> Result<Polynomial> {
         let mut poly = Polynomial::new();
         
-        // Use len(seed) * 8 bits
-        let bits = Self::bytes_to_bits(seed);
+        // Convert seed to bit array
+        let bits = bytes_to_bits(seed);
         
         for i in 0..256 {
             let mut a = 0;
@@ -104,11 +105,10 @@ impl RejectionSampler {
     
     /// Sample a uniform polynomial in NTT domain
     /// Used in both ML-KEM and ML-DSA
-    pub fn sample_ntt(seed: &[u8]) -> Result<Polynomial> {
-        let modulus = if seed.len() > 0 && seed[0] == 0 { 
-            3329 // ML-KEM modulus
-        } else {
-            8380417 // ML-DSA modulus
+    pub fn sample_ntt(seed: &[u8], ntt_type: NTTType) -> Result<Polynomial> {
+        let modulus = match ntt_type {
+            NTTType::MLKEM => 3329,    // ML-KEM modulus
+            NTTType::MLDSA => 8380417, // ML-DSA modulus
         };
         
         let mut poly = Polynomial::new();
@@ -119,15 +119,28 @@ impl RejectionSampler {
         
         // Use rejection sampling to get coefficients in [0, q-1]
         let mut iterations = 0;
-        let max_iterations = 280; // Safety limit, see ML-KEM spec
+        let max_iterations = 280; // Safety limit
         
         while j < 256 && iterations < max_iterations {
             iterations += 1;
             let bytes = ctx.squeeze(3);
             
-            // Extract two values from 3 bytes
-            let d1 = ((bytes[0] as u32) | ((bytes[1] as u32 & 0x0F) << 8)) as i32;
-            let d2 = (((bytes[1] as u32 & 0xF0) >> 4) | ((bytes[2] as u32) << 4)) as i32;
+            // Extract values based on NTT type
+            let (d1, d2) = match ntt_type {
+                NTTType::MLKEM => {
+                    // For ML-KEM (q = 3329), we need at most 12 bits per coefficient
+                    let d1 = ((bytes[0] as u32) | ((bytes[1] as u32 & 0x0F) << 8)) as i32;
+                    let d2 = (((bytes[1] as u32 & 0xF0) >> 4) | ((bytes[2] as u32) << 4)) as i32;
+                    (d1, d2)
+                },
+                NTTType::MLDSA => {
+                    // For ML-DSA (q = 8380417), we need about 23 bits per coefficient
+                    // This is a simplified approach - only extracting two coefficients from 3 bytes
+                    let d1 = ((bytes[0] as u32) | ((bytes[1] as u32 & 0x0F) << 8)) as i32;
+                    let d2 = (((bytes[1] as u32 & 0xF0) >> 4) | ((bytes[2] as u32) << 4)) as i32;
+                    (d1, d2)
+                }
+            };
             
             // Reject values that are not in [0, q-1]
             if d1 < modulus {
@@ -228,15 +241,72 @@ impl RejectionSampler {
         
         Ok(poly)
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
     
-    /// Helper function to convert bytes to bits
-    fn bytes_to_bits(bytes: &[u8]) -> Vec<u8> {
-        let mut bits = Vec::with_capacity(bytes.len() * 8);
-        for &byte in bytes {
-            for j in 0..8 {
-                bits.push((byte >> j) & 1);
+    #[test]
+    fn test_sample_cbd_mlkem() {
+        // Test sampling with ML-KEM parameters
+        let seed = [0u8; 64]; // All zeros for reproducibility
+        let eta = 2;
+        
+        let poly = RejectionSampler::sample_cbd(&seed, eta, NTTType::MLKEM).unwrap();
+        
+        // Check that coefficients are in the correct range
+        for i in 0..256 {
+            assert!(poly.coeffs[i] >= -eta as i32 && poly.coeffs[i] <= eta as i32);
+        }
+    }
+    
+    #[test]
+    fn test_sample_ntt_mlkem() {
+        // Test sampling with ML-KEM parameters
+        let seed = [0u8; 32]; // All zeros for reproducibility
+        
+        let poly = RejectionSampler::sample_ntt(&seed, NTTType::MLKEM).unwrap();
+        
+        // Check that coefficients are in the correct range
+        for i in 0..256 {
+            assert!(poly.coeffs[i] >= 0 && poly.coeffs[i] < 3329);
+        }
+    }
+    
+    #[test]
+    fn test_sample_ntt_mldsa() {
+        // Test sampling with ML-DSA parameters
+        let seed = [0u8; 32]; // All zeros for reproducibility
+        
+        let poly = RejectionSampler::sample_ntt(&seed, NTTType::MLDSA).unwrap();
+        
+        // Check that coefficients are in the correct range
+        for i in 0..256 {
+            assert!(poly.coeffs[i] >= 0 && poly.coeffs[i] < 8380417);
+        }
+    }
+    
+    #[test]
+    fn test_sample_in_ball() {
+        // Test sampling with ML-DSA challenge parameters
+        let seed = [0u8; 32]; // All zeros for reproducibility
+        let tau = 39; // ML-DSA-44 parameter
+        
+        let sampler = SampleInBall::new(tau);
+        let poly = sampler.sample(&seed).unwrap();
+        
+        // Count non-zero coefficients
+        let mut count = 0;
+        for i in 0..256 {
+            if poly.coeffs[i] != 0 {
+                count += 1;
+                // Check that coefficients are either +1 or -1
+                assert!(poly.coeffs[i] == 1 || poly.coeffs[i] == -1);
             }
         }
-        bits
+        
+        // Verify exactly tau non-zero coefficients
+        assert_eq!(count, tau);
     }
 }

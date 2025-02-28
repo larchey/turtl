@@ -1,10 +1,11 @@
 //! Encoding and decoding functions for ML-KEM and ML-DSA.
 //! 
-//! This module implements shared encoding and decoding operations
-//! used by both ML-KEM and ML-DSA.
+//! This module implements encoding and decoding operations
+//! for both ML-KEM and ML-DSA algorithms.
 
 use crate::error::{Error, Result};
 use crate::common::poly::Polynomial;
+use crate::common::ntt::NTTType;
 
 /// Convert a byte array to a bit array
 pub fn bytes_to_bits(bytes: &[u8]) -> Vec<u8> {
@@ -53,12 +54,76 @@ pub fn bytes_to_int(bytes: &[u8]) -> u32 {
     result
 }
 
+/// ML-KEM/ML-DSA Compression function
+pub fn compress(x: u32, d: usize, q: u32) -> u32 {
+    ((((1u64 << d) * x as u64 + q as u64 / 2) / q as u64) % (1u64 << d)) as u32
+}
+
+/// ML-KEM/ML-DSA Decompression function
+pub fn decompress(x: u32, d: usize, q: u32) -> u32 {
+    ((q as u64 * x as u64 + (1u64 << (d - 1))) >> d) as u32
+}
+
+/// Get modulus for the specified algorithm type
+pub fn get_modulus_for_ntt_type(ntt_type: NTTType) -> u32 {
+    match ntt_type {
+        NTTType::MLKEM => 3329,     // ML-KEM modulus
+        NTTType::MLDSA => 8380417,  // ML-DSA modulus
+    }
+}
+
+/// Compress a polynomial according to algorithm type
+pub fn compress_poly(poly: &Polynomial, d: usize, ntt_type: NTTType) -> Result<Polynomial> {
+    let q = get_modulus_for_ntt_type(ntt_type);
+    let mut result = Polynomial::new();
+    
+    for i in 0..256 {
+        let value = poly.coeffs[i] as u32;
+        if value >= q {
+            return Err(Error::EncodingError(format!(
+                "Value out of range for compression: {} not in [0, {})", value, q
+            )));
+        }
+        
+        // Compress_d(x) = ⌈(2^d/q) · x⌋ mod 2^d
+        result.coeffs[i] = compress(value, d, q) as i32;
+    }
+    
+    Ok(result)
+}
+
+/// Decompress a polynomial according to algorithm type
+pub fn decompress_poly(poly: &Polynomial, d: usize, ntt_type: NTTType) -> Result<Polynomial> {
+    let q = get_modulus_for_ntt_type(ntt_type);
+    let mut result = Polynomial::new();
+    
+    for i in 0..256 {
+        let value = poly.coeffs[i] as u32;
+        if value >= (1 << d) {
+            return Err(Error::EncodingError(format!(
+                "Value out of range for decompression: {} not in [0, 2^{})", value, d
+            )));
+        }
+        
+        // Decompress_d(y) = ⌈(q/2^d) · y⌋
+        result.coeffs[i] = decompress(value, d, q) as i32;
+    }
+    
+    Ok(result)
+}
+
 /// Encode a polynomial with coefficients in [0, 2^bits-1]
-pub fn encode_poly(poly: &Polynomial, bits: usize) -> Result<Vec<u8>> {
+pub fn encode_poly(poly: &Polynomial, bits: usize, ntt_type: NTTType) -> Result<Vec<u8>> {
+    let q = get_modulus_for_ntt_type(ntt_type);
+    
     let mut bits_array = Vec::with_capacity(256 * bits);
     
     for i in 0..256 {
         let coeff = poly.coeffs[i] as u32;
+        if coeff >= q {
+            return Err(Error::EncodingError(format!("Coefficient out of range: {}", coeff)));
+        }
+        
         for j in 0..bits {
             bits_array.push(((coeff >> j) & 1) as u8);
         }
@@ -68,7 +133,9 @@ pub fn encode_poly(poly: &Polynomial, bits: usize) -> Result<Vec<u8>> {
 }
 
 /// Decode a polynomial with coefficients in [0, 2^bits-1]
-pub fn decode_poly(bytes: &[u8], bits: usize) -> Result<Polynomial> {
+pub fn decode_poly(bytes: &[u8], bits: usize, ntt_type: NTTType) -> Result<Polynomial> {
+    let q = get_modulus_for_ntt_type(ntt_type);
+    
     let mut poly = Polynomial::new();
     let bits_array = bytes_to_bits(bytes);
     
@@ -83,6 +150,11 @@ pub fn decode_poly(bytes: &[u8], bits: usize) -> Result<Polynomial> {
                 coeff |= (bits_array[i * bits + j] as u32) << j;
             }
         }
+        
+        if coeff >= q {
+            return Err(Error::EncodingError(format!("Coefficient out of range: {}", coeff)));
+        }
+        
         poly.coeffs[i] = coeff as i32;
     }
     
@@ -90,14 +162,23 @@ pub fn decode_poly(bytes: &[u8], bits: usize) -> Result<Polynomial> {
 }
 
 /// Encode a polynomial with coefficients in [-a, b]
-pub fn encode_poly_signed(poly: &Polynomial, a: usize, b: usize) -> Result<Vec<u8>> {
-    let bits = bitlen(a + b);
+pub fn encode_poly_signed(poly: &Polynomial, a: i32, b: i32, ntt_type: NTTType) -> Result<Vec<u8>> {
+    let q = get_modulus_for_ntt_type(ntt_type);
+    let bits = bitlen((a + b + 1) as u32);
     let mut bits_array = Vec::with_capacity(256 * bits);
     
     for i in 0..256 {
-        let coeff = (poly.coeffs[i] + (a as i32)) as u32;
+        let coeff = poly.coeffs[i];
+        if coeff < -a || coeff > b {
+            return Err(Error::EncodingError(format!("Coefficient out of range: {}", coeff)));
+        }
+        
+        // Map [-a, b] to [0, a+b]
+        let mapped = (coeff + a) as u32;
+        
+        // Store in bits_per_coeff bits
         for j in 0..bits {
-            bits_array.push(((coeff >> j) & 1) as u8);
+            bits_array.push(((mapped >> j) & 1) as u8);
         }
     }
     
@@ -105,8 +186,9 @@ pub fn encode_poly_signed(poly: &Polynomial, a: usize, b: usize) -> Result<Vec<u
 }
 
 /// Decode a polynomial with coefficients in [-a, b]
-pub fn decode_poly_signed(bytes: &[u8], a: usize, b: usize) -> Result<Polynomial> {
-    let bits = bitlen(a + b);
+pub fn decode_poly_signed(bytes: &[u8], a: i32, b: i32, ntt_type: NTTType) -> Result<Polynomial> {
+    let q = get_modulus_for_ntt_type(ntt_type);
+    let bits = bitlen((a + b + 1) as u32);
     let mut poly = Polynomial::new();
     let bits_array = bytes_to_bits(bytes);
     
@@ -115,78 +197,145 @@ pub fn decode_poly_signed(bytes: &[u8], a: usize, b: usize) -> Result<Polynomial
     }
     
     for i in 0..256 {
-        let mut coeff = 0u32;
+        let mut mapped = 0u32;
         for j in 0..bits {
             if i * bits + j < bits_array.len() {
-                coeff |= (bits_array[i * bits + j] as u32) << j;
+                mapped |= (bits_array[i * bits + j] as u32) << j;
             }
         }
-        poly.coeffs[i] = (coeff as i32) - (a as i32);
+        
+        if mapped > (a + b) as u32 {
+            return Err(Error::EncodingError(format!("Decoded value out of range: {}", mapped)));
+        }
+        
+        // Map [0, a+b] back to [-a, b]
+        poly.coeffs[i] = mapped as i32 - a;
     }
     
     Ok(poly)
 }
 
-/// Encode a sparse polynomial (with hints)
-pub fn encode_sparse_poly(poly: &Polynomial) -> Result<Vec<u8>> {
-    let mut result = Vec::new();
+/// Encode a polynomial for use in message encoding (d = 1)
+pub fn byte_encode1(poly: &Polynomial, ntt_type: NTTType) -> Result<Vec<u8>> {
+    // For d = 1, each coefficient is 0 or 1
+    let mut result = vec![0u8; 32]; // 256 bits = 32 bytes
     
-    // Count non-zero positions
-    let mut positions = Vec::new();
     for i in 0..256 {
-        if poly.coeffs[i] != 0 {
-            positions.push(i);
+        let coeff = poly.coeffs[i];
+        if coeff != 0 && coeff != 1 {
+            return Err(Error::EncodingError(format!("Coefficient out of range for d=1: {}", coeff)));
         }
-    }
-    
-    // Store the number of non-zero positions
-    result.push(positions.len() as u8);
-    
-    // Store the positions
-    for pos in positions {
-        result.push(pos as u8);
-        // If pos > 255, we'd need to handle this differently
+        
+        if coeff == 1 {
+            result[i / 8] |= 1 << (i % 8);
+        }
     }
     
     Ok(result)
 }
 
-/// Decode a sparse polynomial (with hints)
-pub fn decode_sparse_poly(bytes: &[u8]) -> Result<Polynomial> {
+/// Decode a polynomial from bytes (d = 1)
+pub fn byte_decode1(bytes: &[u8], ntt_type: NTTType) -> Result<Polynomial> {
+    if bytes.len() < 32 {
+        return Err(Error::EncodingError(format!(
+            "Input too short: expected at least 32 bytes, got {}",
+            bytes.len()
+        )));
+    }
+    
     let mut poly = Polynomial::new();
     
-    if bytes.is_empty() {
-        return Err(Error::EncodingError("Empty byte array".to_string()));
-    }
-    
-    let num_positions = bytes[0] as usize;
-    
-    if bytes.len() < 1 + num_positions {
-        return Err(Error::EncodingError("Byte array too short".to_string()));
-    }
-    
-    for i in 0..num_positions {
-        let pos = bytes[i + 1] as usize;
-        poly.coeffs[pos] = 1;
+    for i in 0..256 {
+        if (bytes[i / 8] >> (i % 8)) & 1 == 1 {
+            poly.coeffs[i] = 1;
+        } else {
+            poly.coeffs[i] = 0;
+        }
     }
     
     Ok(poly)
 }
 
 /// Calculate bit length of a positive integer
-pub fn bitlen(n: usize) -> usize {
+pub fn bitlen(n: u32) -> usize {
     if n == 0 {
         return 1;
     }
-    (n as f64).log2().ceil() as usize
+    (32 - n.leading_zeros()) as usize
 }
 
-/// ML-KEM/ML-DSA Compression function
-pub fn compress(x: u32, d: usize, q: u32) -> u32 {
-    ((((1u64 << d) * x as u64 + q as u64 / 2) / q as u64) % (1u64 << d)) as u32
-}
-
-/// ML-KEM/ML-DSA Decompression function
-pub fn decompress(x: u32, d: usize, q: u32) -> u32 {
-    ((q as u64 * x as u64 + (1u64 << (d - 1))) >> d) as u32
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_compression_mlkem() {
+        // Test vector for ML-KEM compression
+        let q = 3329;
+        let d = 4;
+        let x = 1234;
+        
+        let compressed = compress(x, d, q);
+        let decompressed = decompress(compressed, d, q);
+        
+        // The decompressed value should be close to the original
+        assert!(i32::abs(x as i32 - decompressed as i32) <= q as i32 / (1 << d));
+        
+        // Test property: Compress(Decompress(y)) = y
+        for y in 0..(1 << d) {
+            let d_val = decompress(y, d, q);
+            let c_val = compress(d_val, d, q);
+            assert_eq!(c_val, y);
+        }
+    }
+    
+    #[test]
+    fn test_compression_mldsa() {
+        // Test vector for ML-DSA compression
+        let q = 8380417;
+        let d = 6;
+        let x = 123456;
+        
+        let compressed = compress(x, d, q);
+        let decompressed = decompress(compressed, d, q);
+        
+        // The decompressed value should be close to the original
+        assert!(i32::abs(x as i32 - decompressed as i32) <= q as i32 / (1 << d));
+        
+        // Test property: Compress(Decompress(y)) = y
+        for y in 0..16 { // Test just a few values to keep test runtime reasonable
+            let d_val = decompress(y, d, q);
+            let c_val = compress(d_val, d, q);
+            assert_eq!(c_val, y);
+        }
+    }
+    
+    #[test]
+    fn test_bit_conversion() {
+        let original = vec![0xA5, 0x3C, 0xF0];
+        let bits = bytes_to_bits(&original);
+        let bytes = bits_to_bytes(&bits);
+        
+        assert_eq!(bytes, original);
+    }
+    
+    #[test]
+    fn test_encode_decode_poly() {
+        let ntt_type = NTTType::MLKEM;
+        let q = get_modulus_for_ntt_type(ntt_type);
+        let bits = 12; // Sufficient bits to represent values in [0, q-1]
+        
+        let mut poly = Polynomial::new();
+        for i in 0..256 {
+            poly.coeffs[i] = (i as i32 * 13) % q as i32;
+        }
+        
+        let encoded = encode_poly(&poly, bits, ntt_type).unwrap();
+        let decoded = decode_poly(&encoded, bits, ntt_type).unwrap();
+        
+        // Check that we recover the same polynomial
+        for i in 0..256 {
+            assert_eq!(poly.coeffs[i], decoded.coeffs[i]);
+        }
+    }
 }

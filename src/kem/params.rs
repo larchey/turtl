@@ -14,6 +14,20 @@ pub enum ParameterSet {
 }
 
 impl ParameterSet {
+    /// Get the NIST security category
+    pub fn security_category(&self) -> usize {
+        match self {
+            Self::ML_KEM_512 => 1,
+            Self::ML_KEM_768 => 3,
+            Self::ML_KEM_1024 => 5,
+        }
+    }
+    
+    /// Get the modulus q for ML-KEM
+    pub fn q(&self) -> i32 {
+        3329 // Same for all ML-KEM parameter sets per FIPS 203
+    }
+    
     /// Get the value of parameter k (matrix dimension)
     pub fn k(&self) -> usize {
         match self {
@@ -83,15 +97,6 @@ impl ParameterSet {
             Self::ML_KEM_512 => 768,
             Self::ML_KEM_768 => 1088,
             Self::ML_KEM_1024 => 1568,
-        }
-    }
-    
-    /// Get the security category
-    pub fn security_category(&self) -> usize {
-        match self {
-            Self::ML_KEM_512 => 1,
-            Self::ML_KEM_768 => 3,
-            Self::ML_KEM_1024 => 5,
         }
     }
     
