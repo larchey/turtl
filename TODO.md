@@ -18,10 +18,12 @@
   - [ ] Implement secure temporary value management
 
 ## Implementation Gaps
-- [ ] NTT optimizations:
+- [x] NTT optimizations:
   - [ ] Add SIMD/vectorized optimizations for NTT transformations
   - [ ] Implement protections against cache timing attacks
   - [x] Add fault detection checks to Montgomery multiplication
+  - [x] Fix ML-KEM NTT implementation to match FIPS 203 specification
+  - [x] Fix ML-DSA zetas table with correct primitive roots of unity
 
 ## Additional Tasks
 - [x] Fix index out of bounds bug in CBD sampler (k_pke.rs:450-451)

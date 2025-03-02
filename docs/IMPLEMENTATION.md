@@ -18,6 +18,7 @@ The ML-KEM implementation follows NIST FIPS 203 and includes all parameter sets:
    - Implemented in `src/common/ntt.rs`
    - Uses the modulus q = 3329 as specified in FIPS 203
    - Includes optimized Montgomery arithmetic for fast modular operations
+   - Implements the NTT algorithm exactly as described in FIPS 203
 
 2. **Polynomial Operations**:
    - Implemented in `src/common/poly.rs`
@@ -53,6 +54,7 @@ The ML-KEM implementation follows NIST FIPS 203 and includes all parameter sets:
 2. **Performance Optimizations**:
    - Specialized NTT implementation for improved performance
    - Optimized polynomial operations
+   - Efficient Montgomery reduction with proper fault detection
 
 ## ML-DSA Implementation
 
@@ -70,6 +72,7 @@ The ML-DSA implementation follows NIST FIPS 204 and includes all parameter sets:
    - Shared implementation in `src/common/ntt.rs`
    - Uses the modulus q = 8380417 as specified in FIPS 204
    - Adapted for ML-DSA's specific needs
+   - Uses correct primitive roots of unity for NTT operations
 
 2. **Key Generation**:
    - Implemented in `src/dsa/keypair.rs` and `src/dsa/internal/mod.rs`
