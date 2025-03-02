@@ -181,7 +181,8 @@ pub(crate) fn decapsulate_internal(private_key: &PrivateKey, ciphertext: &Cipher
     
     // Verify the re-encryption result in constant time
     // In ML-KEM, not all cases pass this check by design (implicit rejection)
-    let verification_result = fault_detection::ct_eq(ciphertext.as_bytes(), re_encrypted.as_bytes());
+    // This check is done but the result isn't used directly (handled by k_bar selection)
+    let _verification_result = fault_detection::ct_eq(ciphertext.as_bytes(), re_encrypted.as_bytes());
     
     // Note: We're not explicitly handling verification failure here because the ml_kem_decaps_internal 
     // function already handles the implicit rejection case by using k_bar when ciphertexts don't match.

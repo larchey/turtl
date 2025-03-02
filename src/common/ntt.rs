@@ -591,8 +591,8 @@ mod tests {
         }
         
         // Save copies
-        let a_orig = a.clone();
-        let b_orig = b.clone();
+        let _a_orig = a.clone();
+        let _b_orig = b.clone();
         
         // Transform to NTT domain
         ctx.forward(&mut a).unwrap();
@@ -624,8 +624,8 @@ mod tests {
         }
         
         // Save copies
-        let a_orig = a.clone();
-        let b_orig = b.clone();
+        let _a_orig = a.clone();
+        let _b_orig = b.clone();
         
         // Transform to NTT domain
         ctx.forward(&mut a).unwrap();

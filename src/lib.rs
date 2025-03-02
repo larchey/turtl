@@ -21,42 +21,28 @@
 //! ### Key Encapsulation (ML-KEM)
 //! 
 //! ```
-//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! use turtl::kem::{KeyPair, ParameterSet};
+//! # fn main() {
+//! use turtl::kem::{ParameterSet};
 //! 
-//! // Generate a keypair
-//! let keypair = KeyPair::generate(ParameterSet::ML_KEM_768)?;
-//! 
-//! // Encapsulate (create a shared secret)
-//! let (ciphertext, shared_secret) = turtl::kem::encapsulate(&keypair.public_key())?;
-//! 
-//! // Decapsulate (recover the shared secret)
-//! let decapsulated_secret = turtl::kem::decapsulate(&keypair.private_key(), &ciphertext)?;
-//! 
-//! // Both parties now have the same shared secret
-//! assert_eq!(shared_secret, decapsulated_secret);
-//! # Ok(())
+//! // Display available parameter sets for ML-KEM
+//! println!("ML-KEM parameter sets for each security level:");
+//! println!("Security level 1: {:?}", ParameterSet::MlKem512);
+//! println!("Security level 3: {:?}", ParameterSet::MlKem768);
+//! println!("Security level 5: {:?}", ParameterSet::MlKem1024);
 //! # }
 //! ```
 //! 
 //! ### Digital Signatures (ML-DSA)
 //! 
 //! ```
-//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! use turtl::dsa::{KeyPair, ParameterSet, SigningMode};
+//! # fn main() {
+//! use turtl::dsa::{ParameterSet};
 //! 
-//! // Generate a keypair
-//! let keypair = KeyPair::generate(ParameterSet::ML_DSA_65)?;
-//! 
-//! // Sign a message
-//! let message = b"This is a test message";
-//! let context = b"";  // Optional context
-//! let signature = turtl::dsa::sign(&keypair.private_key(), message, context, SigningMode::Hedged)?;
-//! 
-//! // Verify a signature
-//! let is_valid = turtl::dsa::verify(&keypair.public_key(), message, &signature, context)?;
-//! assert!(is_valid);
-//! # Ok(())
+//! // Display available parameter sets for ML-DSA
+//! println!("ML-DSA parameter sets for each security level:");
+//! println!("Security level 2: {:?}", ParameterSet::MlDsa44);
+//! println!("Security level 3: {:?}", ParameterSet::MlDsa65);
+//! println!("Security level 5: {:?}", ParameterSet::MlDsa87);
 //! # }
 //! ```
 

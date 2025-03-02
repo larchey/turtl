@@ -6,7 +6,7 @@
 //! These test vectors are derived from the NIST ML-KEM Known Answer Tests (KATs)
 //! and are used to validate the correctness of the implementation.
 
-use turtl::kem::{self, ParameterSet, KeyPair, PublicKey, PrivateKey, Ciphertext, SharedSecret};
+use turtl::kem::{ParameterSet};
 use turtl::error::Result;
 use hex;
 use turtl::Error;
@@ -43,8 +43,8 @@ fn test_ml_kem_512_key_generation() -> Result<()> {
 
 #[test]
 fn test_ml_kem_512_deterministic_encaps_decaps() -> Result<()> {
-    // Parse the simplified test vectors
-    let pk_bytes = hex::decode(SIMPLIFIED_PK).map_err(|e| Error::EncodingError(e.to_string()))?;
+    // Parse the simplified test vectors (commented out as not used)
+    // let _pk_bytes = hex::decode(SIMPLIFIED_PK).map_err(|e| Error::EncodingError(e.to_string()))?;
     
     // Instead of full validation, we'll just check that basic functions don't crash
     // In a real test, we would verify real cryptographic properties

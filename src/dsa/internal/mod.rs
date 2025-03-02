@@ -1224,14 +1224,18 @@ fn encode_private_key(
     // Calculate sizes
     let s_max_value = eta as u32;
     let s_bits_per_coeff = bitlen(2 * s_max_value);
+    #[cfg(test)]
     let s_size = (l + k) * ((256 * s_bits_per_coeff + 7) / 8);
     
     let t0_max_value = (1 << d) - 1;
     let t0_bits_per_coeff = bitlen(t0_max_value);
+    #[cfg(test)]
     let t0_size = k * ((256 * t0_bits_per_coeff + 7) / 8);
     
     // Calculate private key size
+    #[cfg(test)]
     let base_size = 32 + 32 + 64; // rho + key + tr
+    #[cfg(test)]
     let calculated_size = base_size + s_size + t0_size;
     
     #[cfg(test)]
@@ -1675,17 +1679,21 @@ fn encode_signature(
     let (k, l) = parameter_set.dimensions();
     let gamma1 = parameter_set.gamma1();
     let omega = parameter_set.omega();
+    #[cfg(test)]
     let lambda = parameter_set.lambda();
     
     // Calculate signature size
     let z_bits_per_coeff = bitlen((2 * gamma1 - 2) as u32);
     let z_bytes_per_poly = (256 * z_bits_per_coeff + 7) / 8;
+    #[cfg(test)]
     let z_size = l * z_bytes_per_poly;
     
     // Calculate hint size
+    #[cfg(test)]
     let h_size = omega + k;
     
     // Calculate the signature size
+    #[cfg(test)]
     let calculated_size = lambda / 4 + z_size + h_size;
     
     #[cfg(test)]

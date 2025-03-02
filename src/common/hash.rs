@@ -94,7 +94,7 @@ impl SHAKE256Context {
     /// Squeeze output bytes
     pub fn squeeze(&mut self, output_len: usize) -> Vec<u8> {
         // Clone the hasher to keep the state intact for future operations
-        let mut hasher_clone = self.inner.clone();
+        let hasher_clone = self.inner.clone();
         let mut reader = hasher_clone.finalize_xof();
         let mut output = vec![0u8; output_len];
         reader.read(&mut output);
@@ -121,7 +121,7 @@ impl SHAKE128Context {
     /// Squeeze output bytes
     pub fn squeeze(&mut self, output_len: usize) -> Vec<u8> {
         // Clone the hasher to keep the state intact for future operations
-        let mut hasher_clone = self.inner.clone();
+        let hasher_clone = self.inner.clone();
         let mut reader = hasher_clone.finalize_xof();
         let mut output = vec![0u8; output_len];
         reader.read(&mut output);

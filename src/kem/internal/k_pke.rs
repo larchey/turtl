@@ -430,11 +430,8 @@ fn reject_sample_ntt(seed: &[u8], _ntt_ctx: &NTTContext) -> Result<Polynomial> {
 }
 
 
-fn byte_to_bits(bytes: &[u8]) -> Result<Vec<u8>> {
-    // Simple wrapper around the aux function
-    let bits = aux::bytes_to_bits(bytes);
-    Ok(bits)
-}
+// Removed unused function byte_to_bits
+// The aux::bytes_to_bits function should be used directly instead
 
 /// Sample from the centered binomial distribution
 /// This implements the NIST FIPS 203 sampling procedure for the CBD

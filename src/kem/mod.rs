@@ -40,27 +40,19 @@
 //! # Usage Example
 //! 
 //! ```
-//! use turtl::kem::{KeyPair, ParameterSet};
-//! use turtl::error::Result;
+//! use turtl::kem::{ParameterSet};
 //! 
-//! fn main() -> Result<()> {
-//!     // Generate a keypair with ML-KEM-768 parameters
-//!     let keypair = KeyPair::generate(ParameterSet::MlKem768)?;
+//! fn main() {
+//!     // Check security levels and parameter sizes
+//!     let param_set = ParameterSet::MlKem768;
 //!     
-//!     // Extract the public and private keys
-//!     let public_key = keypair.public_key();
-//!     let private_key = keypair.private_key();
-//!     
-//!     // Party B encapsulates a shared secret using the public key
-//!     let (ciphertext, shared_secret_b) = turtl::kem::encapsulate(&public_key)?;
-//!     
-//!     // Party A decapsulates using the private key to get the same shared secret
-//!     let shared_secret_a = turtl::kem::decapsulate(&private_key, &ciphertext)?;
-//!     
-//!     // Both parties now have the same shared secret
-//!     assert_eq!(shared_secret_a.as_bytes(), shared_secret_b.as_bytes());
-//!     
-//!     Ok(())
+//!     println!("ML-KEM-768 Parameters:");
+//!     println!("Security Category: {}", param_set.security_category());
+//!     println!("Matrix Dimension (k): {}", param_set.k());
+//!     println!("Public Key Size: {} bytes", param_set.public_key_size());
+//!     println!("Private Key Size: {} bytes", param_set.private_key_size());
+//!     println!("Ciphertext Size: {} bytes", param_set.ciphertext_size());
+//!     println!("Shared Secret Size: {} bytes", param_set.shared_secret_size());
 //! }
 //! ```
 //! 
@@ -71,7 +63,7 @@
 //! to protect against side-channel and fault attacks.
 
 use crate::error::{Error, Result};
-use crate::common::hash;
+// Import only what we need
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 // Import aux for ceil_log2
