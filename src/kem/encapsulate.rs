@@ -2,7 +2,7 @@
 //! 
 //! This module implements the encapsulation algorithm for ML-KEM.
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 use super::{PublicKey, Ciphertext, SharedSecret};
 use super::internal::{encapsulate_internal};
 

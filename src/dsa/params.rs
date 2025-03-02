@@ -12,9 +12,9 @@ pub enum ParameterSet {
     #[default]
     MlDsa44,
     /// ML-DSA-65 (Security Category 3)
-    ML_DSA_65,
+    MlDsa65,
     /// ML-DSA-87 (Security Category 5)
-    ML_DSA_87,
+    MlDsa87,
 }
 
 // Create a newtype wrapper for ParameterSet to avoid the conflicting impl
@@ -33,8 +33,8 @@ impl ParameterSet {
     pub fn dimensions(&self) -> (usize, usize) {
         match self {
             Self::MlDsa44 => (4, 4),
-            Self::ML_DSA_65 => (6, 5),
-            Self::ML_DSA_87 => (8, 7),
+            Self::MlDsa65 => (6, 5),
+            Self::MlDsa87 => (8, 7),
         }
     }
     
@@ -52,8 +52,8 @@ impl ParameterSet {
     pub fn tau(&self) -> usize {
         match self {
             Self::MlDsa44 => 39,
-            Self::ML_DSA_65 => 49,
-            Self::ML_DSA_87 => 60,
+            Self::MlDsa65 => 49,
+            Self::MlDsa87 => 60,
         }
     }
     
@@ -61,8 +61,8 @@ impl ParameterSet {
     pub fn gamma1(&self) -> usize {
         match self {
             Self::MlDsa44 => 1 << 17,
-            Self::ML_DSA_65 => 1 << 19,
-            Self::ML_DSA_87 => 1 << 19,
+            Self::MlDsa65 => 1 << 19,
+            Self::MlDsa87 => 1 << 19,
         }
     }
     
@@ -70,8 +70,8 @@ impl ParameterSet {
     pub fn gamma2(&self) -> usize {
         match self {
             Self::MlDsa44 => (8380417 - 1) / 88,
-            Self::ML_DSA_65 => (8380417 - 1) / 32,
-            Self::ML_DSA_87 => (8380417 - 1) / 32,
+            Self::MlDsa65 => (8380417 - 1) / 32,
+            Self::MlDsa87 => (8380417 - 1) / 32,
         }
     }
     
@@ -79,8 +79,8 @@ impl ParameterSet {
     pub fn eta(&self) -> usize {
         match self {
             Self::MlDsa44 => 2,
-            Self::ML_DSA_65 => 4,
-            Self::ML_DSA_87 => 2,
+            Self::MlDsa65 => 4,
+            Self::MlDsa87 => 2,
         }
     }
     
@@ -93,8 +93,8 @@ impl ParameterSet {
     pub fn omega(&self) -> usize {
         match self {
             Self::MlDsa44 => 80,
-            Self::ML_DSA_65 => 55,
-            Self::ML_DSA_87 => 75,
+            Self::MlDsa65 => 55,
+            Self::MlDsa87 => 75,
         }
     }
     
@@ -102,8 +102,8 @@ impl ParameterSet {
     pub fn lambda(&self) -> usize {
         match self {
             Self::MlDsa44 => 128,
-            Self::ML_DSA_65 => 192,
-            Self::ML_DSA_87 => 256,
+            Self::MlDsa65 => 192,
+            Self::MlDsa87 => 256,
         }
     }
     
@@ -111,8 +111,8 @@ impl ParameterSet {
     pub fn public_key_size(&self) -> usize {
         match self {
             Self::MlDsa44 => 1312,
-            Self::ML_DSA_65 => 1952,
-            Self::ML_DSA_87 => 2592,
+            Self::MlDsa65 => 1952,
+            Self::MlDsa87 => 2592,
         }
     }
     
@@ -120,8 +120,8 @@ impl ParameterSet {
     pub fn private_key_size(&self) -> usize {
         match self {
             Self::MlDsa44 => 2560,
-            Self::ML_DSA_65 => 4032,
-            Self::ML_DSA_87 => 4896,
+            Self::MlDsa65 => 4032,
+            Self::MlDsa87 => 4896,
         }
     }
     
@@ -129,8 +129,8 @@ impl ParameterSet {
     pub fn signature_size(&self) -> usize {
         match self {
             Self::MlDsa44 => 2420,
-            Self::ML_DSA_65 => 3309,
-            Self::ML_DSA_87 => 4627,
+            Self::MlDsa65 => 3309,
+            Self::MlDsa87 => 4627,
         }
     }
     
@@ -138,8 +138,8 @@ impl ParameterSet {
     pub fn security_category(&self) -> usize {
         match self {
             Self::MlDsa44 => 2,
-            Self::ML_DSA_65 => 3,
-            Self::ML_DSA_87 => 5,
+            Self::MlDsa65 => 3,
+            Self::MlDsa87 => 5,
         }
     }
     
@@ -147,8 +147,8 @@ impl ParameterSet {
     pub fn required_rbg_strength(&self) -> usize {
         match self {
             Self::MlDsa44 => 192, // Recommended: 192, Minimum: 128
-            Self::ML_DSA_65 => 192,
-            Self::ML_DSA_87 => 256,
+            Self::MlDsa65 => 192,
+            Self::MlDsa87 => 256,
         }
     }
 }

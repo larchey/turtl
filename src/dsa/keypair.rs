@@ -4,9 +4,8 @@
 
 use crate::error::{Error, Result};
 use super::{ParameterSet, PublicKey, PrivateKey};
-use crate::common::hash;
 use rand::{RngCore, CryptoRng, rngs::OsRng};
-use super::internal::{ml_dsa_keygen_internal, seed_to_keypair};
+use super::internal::seed_to_keypair;
 
 /// ML-DSA key pair
 #[derive(Clone, Debug)]

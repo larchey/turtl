@@ -10,14 +10,14 @@ pub fn ml_dsa_keygen_benchmark(c: &mut Criterion) {
     
     // Benchmark for each parameter set
     for param_set in &[
-        ParameterSet::ML_DSA_44,
-        ParameterSet::ML_DSA_65,
-        ParameterSet::ML_DSA_87,
+        ParameterSet::MlDsa44,
+        ParameterSet::MlDsa65,
+        ParameterSet::MlDsa87,
     ] {
         let param_name = match param_set {
-            ParameterSet::ML_DSA_44 => "ML-DSA-44",
-            ParameterSet::ML_DSA_65 => "ML-DSA-65",
-            ParameterSet::ML_DSA_87 => "ML-DSA-87",
+            ParameterSet::MlDsa44 => "ML-DSA-44",
+            ParameterSet::MlDsa65 => "ML-DSA-65",
+            ParameterSet::MlDsa87 => "ML-DSA-87",
         };
         
         group.bench_function(BenchmarkId::new("KeyGen", param_name), |b| {
@@ -34,9 +34,9 @@ pub fn ml_dsa_sign_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("ML-DSA Signing");
     
     // Generate key pairs for each parameter set
-    let keypair_44 = KeyPair::generate(ParameterSet::ML_DSA_44).unwrap();
-    let keypair_65 = KeyPair::generate(ParameterSet::ML_DSA_65).unwrap();
-    let keypair_87 = KeyPair::generate(ParameterSet::ML_DSA_87).unwrap();
+    let keypair_44 = KeyPair::generate(ParameterSet::MlDsa44).unwrap();
+    let keypair_65 = KeyPair::generate(ParameterSet::MlDsa65).unwrap();
+    let keypair_87 = KeyPair::generate(ParameterSet::MlDsa87).unwrap();
     
     // Test messages of different sizes
     let small_message = b"Small test message for signing";
@@ -106,9 +106,9 @@ pub fn ml_dsa_verify_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("ML-DSA Verification");
     
     // Generate key pairs for each parameter set
-    let keypair_44 = KeyPair::generate(ParameterSet::ML_DSA_44).unwrap();
-    let keypair_65 = KeyPair::generate(ParameterSet::ML_DSA_65).unwrap();
-    let keypair_87 = KeyPair::generate(ParameterSet::ML_DSA_87).unwrap();
+    let keypair_44 = KeyPair::generate(ParameterSet::MlDsa44).unwrap();
+    let keypair_65 = KeyPair::generate(ParameterSet::MlDsa65).unwrap();
+    let keypair_87 = KeyPair::generate(ParameterSet::MlDsa87).unwrap();
     
     // Test messages of different sizes
     let small_message = b"Small test message for signing";
@@ -195,14 +195,14 @@ pub fn ml_dsa_full_cycle_benchmark(c: &mut Criterion) {
     let context = b"";
     
     for param_set in &[
-        ParameterSet::ML_DSA_44,
-        ParameterSet::ML_DSA_65,
-        ParameterSet::ML_DSA_87,
+        ParameterSet::MlDsa44,
+        ParameterSet::MlDsa65,
+        ParameterSet::MlDsa87,
     ] {
         let param_name = match param_set {
-            ParameterSet::ML_DSA_44 => "ML-DSA-44",
-            ParameterSet::ML_DSA_65 => "ML-DSA-65",
-            ParameterSet::ML_DSA_87 => "ML-DSA-87",
+            ParameterSet::MlDsa44 => "ML-DSA-44",
+            ParameterSet::MlDsa65 => "ML-DSA-65",
+            ParameterSet::MlDsa87 => "ML-DSA-87",
         };
         
         group.bench_function(BenchmarkId::new("Full Cycle", param_name), |b| {
@@ -241,7 +241,7 @@ pub fn ml_dsa_stamp_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("ML-DSA Stamp Operations");
     
     // Generate key pairs
-    let keypair_44 = KeyPair::generate(ParameterSet::ML_DSA_44).unwrap();
+    let keypair_44 = KeyPair::generate(ParameterSet::MlDsa44).unwrap();
     
     // Create stamp
     let stamp = dsa::stamp::Stamp::new(keypair_44.private_key());

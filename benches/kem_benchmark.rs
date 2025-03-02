@@ -4,22 +4,21 @@
 //! decapsulation operations for each ML-KEM parameter set.
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
-use turtl::kem::{self, ParameterSet, KeyPair, PublicKey, PrivateKey, Ciphertext, SharedSecret};
-use turtl::error::Result;
+use turtl::kem::{self, ParameterSet, KeyPair};
 
 pub fn ml_kem_keygen_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("ML-KEM Key Generation");
     
     // Benchmark for each parameter set
     for param_set in &[
-        ParameterSet::ML_KEM_512,
-        ParameterSet::ML_KEM_768,
-        ParameterSet::ML_KEM_1024,
+        ParameterSet::MlKem512,
+        ParameterSet::MlKem768,
+        ParameterSet::MlKem1024,
     ] {
         let param_name = match param_set {
-            ParameterSet::ML_KEM_512 => "ML-KEM-512",
-            ParameterSet::ML_KEM_768 => "ML-KEM-768",
-            ParameterSet::ML_KEM_1024 => "ML-KEM-1024",
+            ParameterSet::MlKem512 => "ML-KEM-512",
+            ParameterSet::MlKem768 => "ML-KEM-768",
+            ParameterSet::MlKem1024 => "ML-KEM-1024",
         };
         
         group.bench_function(BenchmarkId::new("KeyGen", param_name), |b| {
@@ -36,9 +35,9 @@ pub fn ml_kem_encaps_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("ML-KEM Encapsulation");
     
     // Generate key pairs for each parameter set
-    let keypair_512 = KeyPair::generate(ParameterSet::ML_KEM_512).unwrap();
-    let keypair_768 = KeyPair::generate(ParameterSet::ML_KEM_768).unwrap();
-    let keypair_1024 = KeyPair::generate(ParameterSet::ML_KEM_1024).unwrap();
+    let keypair_512 = KeyPair::generate(ParameterSet::MlKem512).unwrap();
+    let keypair_768 = KeyPair::generate(ParameterSet::MlKem768).unwrap();
+    let keypair_1024 = KeyPair::generate(ParameterSet::MlKem1024).unwrap();
     
     // Benchmark encapsulation for each parameter set
     group.bench_function(BenchmarkId::new("Encaps", "ML-KEM-512"), |b| {
@@ -66,9 +65,9 @@ pub fn ml_kem_decaps_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("ML-KEM Decapsulation");
     
     // Generate key pairs for each parameter set
-    let keypair_512 = KeyPair::generate(ParameterSet::ML_KEM_512).unwrap();
-    let keypair_768 = KeyPair::generate(ParameterSet::ML_KEM_768).unwrap();
-    let keypair_1024 = KeyPair::generate(ParameterSet::ML_KEM_1024).unwrap();
+    let keypair_512 = KeyPair::generate(ParameterSet::MlKem512).unwrap();
+    let keypair_768 = KeyPair::generate(ParameterSet::MlKem768).unwrap();
+    let keypair_1024 = KeyPair::generate(ParameterSet::MlKem1024).unwrap();
     
     // Generate ciphertexts for each parameter set
     let (ciphertext_512, _) = kem::encapsulate(&keypair_512.public_key()).unwrap();
@@ -110,14 +109,14 @@ pub fn ml_kem_full_exchange_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("ML-KEM Full Exchange");
     
     for param_set in &[
-        ParameterSet::ML_KEM_512,
-        ParameterSet::ML_KEM_768,
-        ParameterSet::ML_KEM_1024,
+        ParameterSet::MlKem512,
+        ParameterSet::MlKem768,
+        ParameterSet::MlKem1024,
     ] {
         let param_name = match param_set {
-            ParameterSet::ML_KEM_512 => "ML-KEM-512",
-            ParameterSet::ML_KEM_768 => "ML-KEM-768",
-            ParameterSet::ML_KEM_1024 => "ML-KEM-1024",
+            ParameterSet::MlKem512 => "ML-KEM-512",
+            ParameterSet::MlKem768 => "ML-KEM-768",
+            ParameterSet::MlKem1024 => "ML-KEM-1024",
         };
         
         group.bench_function(BenchmarkId::new("Full Exchange", param_name), |b| {
@@ -146,7 +145,7 @@ pub fn ml_kem_shell_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("ML-KEM Shell Key Derivation");
     
     // Generate a shared secret
-    let keypair = KeyPair::generate(ParameterSet::ML_KEM_512).unwrap();
+    let keypair = KeyPair::generate(ParameterSet::MlKem512).unwrap();
     let (_, shared_secret) = kem::encapsulate(&keypair.public_key()).unwrap();
     
     // Create a shell

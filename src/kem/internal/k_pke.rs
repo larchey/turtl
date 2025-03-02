@@ -44,7 +44,7 @@ pub(crate) fn generate_key_components(
     let mut counter = 0u8;
     
     // Sample s1
-    for i in 0..k {
+    for _i in 0..k {
         let mut seed = Vec::with_capacity(rhoprime.len() + 1);
         seed.extend_from_slice(rhoprime);
         seed.push(counter);
@@ -54,7 +54,7 @@ pub(crate) fn generate_key_components(
     }
     
     // Sample s2
-    for i in 0..k {
+    for _i in 0..k {
         let mut seed = Vec::with_capacity(rhoprime.len() + 1);
         seed.extend_from_slice(rhoprime);
         seed.push(counter);
@@ -90,7 +90,7 @@ pub(crate) fn compute_public_t(
         
         // Compute the i-th row of A times s1
         for j in 0..k {
-            let mut prod = ntt_ctx.multiply_ntt(&matrix_a[i][j], &s1_ntt[j])?;
+            let prod = ntt_ctx.multiply_ntt(&matrix_a[i][j], &s1_ntt[j])?;
             t_i.add_assign(&prod, ntt_ctx.modulus);
         }
         
@@ -109,7 +109,7 @@ pub(crate) fn compute_public_t(
 /// Power2Round: Split a polynomial vector into high and low bits
 pub(crate) fn power2round(
     t: &[Polynomial],
-    parameter_set: ParameterSet
+    _parameter_set: ParameterSet
 ) -> Result<(Vec<Polynomial>, Vec<Polynomial>)> {
     let k = t.len();
     let d = 13; // The d parameter from FIPS 203
@@ -255,7 +255,7 @@ pub(crate) fn encrypt(
     
     // 9-12. Generate vector y
     let mut y = Vec::with_capacity(k);
-    for i in 0..k {
+    for _i in 0..k {
         let mut seed = Vec::with_capacity(randomness.len() + 1);
         seed.extend_from_slice(randomness);
         seed.push(counter);
@@ -266,7 +266,7 @@ pub(crate) fn encrypt(
     
     // 13-16. Generate vector e1
     let mut e1 = Vec::with_capacity(k);
-    for i in 0..k {
+    for _i in 0..k {
         let mut seed = Vec::with_capacity(randomness.len() + 1);
         seed.extend_from_slice(randomness);
         seed.push(counter);
@@ -296,7 +296,7 @@ pub(crate) fn encrypt(
         
         // Compute the j-th column of A times y
         for i in 0..k {
-            let mut prod = ntt_ctx.multiply_ntt(&matrix_a[i][j], &y_ntt[i])?;
+            let prod = ntt_ctx.multiply_ntt(&matrix_a[i][j], &y_ntt[i])?;
             u_j.add_assign(&prod, ntt_ctx.modulus);
         }
         
@@ -401,7 +401,7 @@ fn bitlen(n: u32) -> usize {
 }
 
 /// Rejection sampling in NTT domain
-fn reject_sample_ntt(seed: &[u8], ntt_ctx: &NTTContext) -> Result<Polynomial> {
+fn reject_sample_ntt(seed: &[u8], _ntt_ctx: &NTTContext) -> Result<Polynomial> {
     // Implementation of RejNTTPoly from FIPS 203
     let mut poly = Polynomial::new();
     let mut j = 0;

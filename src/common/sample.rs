@@ -8,7 +8,6 @@ use crate::common::poly::Polynomial;
 use crate::common::hash;
 use crate::common::ntt::NTTType;
 use crate::common::coding::bytes_to_bits;
-use zeroize::Zeroize;
 
 /// Sample a polynomial with exactly tau +/-1 coefficients
 /// Used in ML-DSA for challenge generation
@@ -77,7 +76,7 @@ pub struct RejectionSampler;
 impl RejectionSampler {
     /// Sample from the centered binomial distribution
     /// Used in ML-KEM for noise generation
-    pub fn sample_cbd(seed: &[u8], eta: usize, ntt_type: NTTType) -> Result<Polynomial> {
+    pub fn sample_cbd(seed: &[u8], eta: usize, _ntt_type: NTTType) -> Result<Polynomial> {
         let mut poly = Polynomial::new();
         
         // Convert seed to bit array

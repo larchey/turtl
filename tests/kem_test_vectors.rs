@@ -20,12 +20,6 @@ const ML_KEM_512_SEED_1: [u8; 32] = [
     0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F,
 ];
 
-const ML_KEM_512_MSG_1: [u8; 32] = [
-    0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27,
-    0x28, 0x29, 0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x2F,
-    0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37,
-    0x38, 0x39, 0x3A, 0x3B, 0x3C, 0x3D, 0x3E, 0x3F,
-];
 
 // The actual test vectors from NIST would include these values
 const ML_KEM_512_PK_1: &str = "9f107e09eaf9a54dbd5a6ce23cd5a4f31cb47f7fc7ea6bd71c0e6d9b5abca11b5e358ffce8f5a62d6490566a7d05979c8ad89d32b88053bb6f0681f0ca0d96f32c6f90b59c497eb6051549405374061faa66c16bd67e56810f8e4b8d4223e13b6b10d49e2dc2a8eaaa4b9c343a1e952d955d8f0cff1da667435e73b7d143a7ad006afb3bf6d481beb49fc54eb39feb4fff4b3b6a4f4c4cfdc19529a7fabe2ee2ca9cd14580cad11a8131ed1c8577d298c3e9e3e60ad9e1c8d8f11d3e070c8df45d9c24c0e0f5fd03877b3e72e93a8c8eb75d8ce0bd0246b0d1cef0b91f65b98bf8a4fb059a8c851e7ecbcf9c12ceb8c2c518b33b8c43f066a0ee6c98f7c885cd0044e4ece106d91751fc056bc1b9e1fb1bb69cb742130e87fe6072243b7899627dd5d13c13e2b3103b14c53bf7b5a98e9e6d55b0e6ea3df8d0a47b0e22093e06e2b78b5d9c49be4a22e8f648d8dac2152eecac32c95f037d5c5d293feb29eb9ce7ce4cb8f1c0f90d7439dbb94d245cd3e9cf9b943cc12a53";
@@ -61,15 +55,15 @@ const ML_KEM_1024_PK_1: &str = "b9f6756dd88bd01c16c4b563b88a4255617b1391465b5584
 #[test]
 fn test_ml_kem_512_key_generation() -> Result<()> {
     // Generate key pair from seed
-    let keypair = KeyPair::from_seed(&ML_KEM_512_SEED_1, ParameterSet::ML_KEM_512)?;
+    let keypair = KeyPair::from_seed(&ML_KEM_512_SEED_1, ParameterSet::MlKem512)?;
     
     // Get public and private keys
     let public_key = keypair.public_key();
     let private_key = keypair.private_key();
     
     // Check sizes
-    assert_eq!(public_key.as_bytes().len(), ParameterSet::ML_KEM_512.public_key_size());
-    assert_eq!(private_key.as_bytes().len(), ParameterSet::ML_KEM_512.private_key_size());
+    assert_eq!(public_key.as_bytes().len(), ParameterSet::MlKem512.public_key_size());
+    assert_eq!(private_key.as_bytes().len(), ParameterSet::MlKem512.private_key_size());
     
     // Compare with expected test vectors
     assert_eq!(hex::encode(public_key.as_bytes()), ML_KEM_512_PK_1);
@@ -81,17 +75,17 @@ fn test_ml_kem_512_key_generation() -> Result<()> {
 #[test]
 fn test_ml_kem_512_deterministic_encaps_decaps() -> Result<()> {
     // Generate key pair from seed
-    let keypair = KeyPair::from_seed(&ML_KEM_512_SEED_1, ParameterSet::ML_KEM_512)?;
+    let keypair = KeyPair::from_seed(&ML_KEM_512_SEED_1, ParameterSet::MlKem512)?;
     
     // Create public key and ciphertext from test vectors
-    let public_key = PublicKey::new(
+    let _public_key = PublicKey::new(
         hex::decode(ML_KEM_512_PK_1).map_err(|e| Error::EncodingError(e.to_string()))?, 
-        ParameterSet::ML_KEM_512
+        ParameterSet::MlKem512
     )?;
     
     let ciphertext = Ciphertext::new(
         hex::decode(ML_KEM_512_CT_1).map_err(|e| Error::EncodingError(e.to_string()))?, 
-        ParameterSet::ML_KEM_512
+        ParameterSet::MlKem512
     )?;
     
     // Expected shared secret
@@ -112,15 +106,15 @@ fn test_ml_kem_512_deterministic_encaps_decaps() -> Result<()> {
 #[test]
 fn test_ml_kem_768_key_generation() -> Result<()> {
     // Generate key pair from seed
-    let keypair = KeyPair::from_seed(&ML_KEM_768_SEED_1, ParameterSet::ML_KEM_768)?;
+    let keypair = KeyPair::from_seed(&ML_KEM_768_SEED_1, ParameterSet::MlKem768)?;
     
     // Get public and private keys
     let public_key = keypair.public_key();
     let private_key = keypair.private_key();
     
     // Check sizes
-    assert_eq!(public_key.as_bytes().len(), ParameterSet::ML_KEM_768.public_key_size());
-    assert_eq!(private_key.as_bytes().len(), ParameterSet::ML_KEM_768.private_key_size());
+    assert_eq!(public_key.as_bytes().len(), ParameterSet::MlKem768.public_key_size());
+    assert_eq!(private_key.as_bytes().len(), ParameterSet::MlKem768.private_key_size());
     
     // Compare with expected test vectors
     assert_eq!(hex::encode(public_key.as_bytes()), ML_KEM_768_PK_1);
@@ -132,13 +126,13 @@ fn test_ml_kem_768_key_generation() -> Result<()> {
 #[test]
 fn test_ml_kem_1024_key_generation() -> Result<()> {
     // Generate key pair from seed
-    let keypair = KeyPair::from_seed(&ML_KEM_1024_SEED_1, ParameterSet::ML_KEM_1024)?;
+    let keypair = KeyPair::from_seed(&ML_KEM_1024_SEED_1, ParameterSet::MlKem1024)?;
     
     // Get public and private keys
     let public_key = keypair.public_key();
     
     // Check sizes
-    assert_eq!(public_key.as_bytes().len(), ParameterSet::ML_KEM_1024.public_key_size());
+    assert_eq!(public_key.as_bytes().len(), ParameterSet::MlKem1024.public_key_size());
     
     // Compare with expected test vectors
     assert_eq!(hex::encode(public_key.as_bytes()), ML_KEM_1024_PK_1);
@@ -149,9 +143,9 @@ fn test_ml_kem_1024_key_generation() -> Result<()> {
 #[test]
 fn test_ml_kem_all_roundtrip() -> Result<()> {
     for param_set in &[
-        ParameterSet::ML_KEM_512,
-        ParameterSet::ML_KEM_768,
-        ParameterSet::ML_KEM_1024
+        ParameterSet::MlKem512,
+        ParameterSet::MlKem768,
+        ParameterSet::MlKem1024
     ] {
         // Generate key pair
         let keypair = KeyPair::generate(*param_set)?;

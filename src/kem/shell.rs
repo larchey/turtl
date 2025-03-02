@@ -5,7 +5,7 @@
 
 use crate::error::{Error, Result};
 use super::SharedSecret;
-use crate::common::hash::{shake256, sha3_256};
+use crate::common::hash::shake256;
 
 /// ML-KEM Shell for key derivation and usage
 #[derive(Clone, Debug)]

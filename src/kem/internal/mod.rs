@@ -5,8 +5,7 @@
 
 use crate::error::{Error, Result};
 use crate::kem::{ParameterSet, PublicKey, PrivateKey, Ciphertext, SharedSecret};
-use crate::common::{ntt::NTTContext, poly::Polynomial, hash};
-use zeroize::Zeroize;
+use crate::common::hash;
 
 pub mod k_pke;
 pub mod aux;

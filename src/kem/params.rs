@@ -10,11 +10,11 @@ use zeroize::Zeroize;
 pub enum ParameterSet {
     /// ML-KEM-512 (Security Category 1)
     #[default]
-    ML_KEM_512,
+    MlKem512,
     /// ML-KEM-768 (Security Category 3)
-    ML_KEM_768,
+    MlKem768,
     /// ML-KEM-1024 (Security Category 5)
-    ML_KEM_1024,
+    MlKem1024,
 }
 
 // Create a newtype wrapper for ParameterSet to avoid the conflicting impl
@@ -32,9 +32,9 @@ impl ParameterSet {
     /// Get the NIST security category
     pub fn security_category(&self) -> usize {
         match self {
-            Self::ML_KEM_512 => 1,
-            Self::ML_KEM_768 => 3,
-            Self::ML_KEM_1024 => 5,
+            Self::MlKem512 => 1,
+            Self::MlKem768 => 3,
+            Self::MlKem1024 => 5,
         }
     }
     
@@ -46,81 +46,81 @@ impl ParameterSet {
     /// Get the value of parameter k (matrix dimension)
     pub fn k(&self) -> usize {
         match self {
-            Self::ML_KEM_512 => 2,
-            Self::ML_KEM_768 => 3,
-            Self::ML_KEM_1024 => 4,
+            Self::MlKem512 => 2,
+            Self::MlKem768 => 3,
+            Self::MlKem1024 => 4,
         }
     }
     
     /// Get the value of parameter eta1 (coefficient range)
     pub fn eta1(&self) -> usize {
         match self {
-            Self::ML_KEM_512 => 3,
-            Self::ML_KEM_768 => 2,
-            Self::ML_KEM_1024 => 2,
+            Self::MlKem512 => 3,
+            Self::MlKem768 => 2,
+            Self::MlKem1024 => 2,
         }
     }
     
     /// Get the value of parameter eta2 (coefficient range)
     pub fn eta2(&self) -> usize {
         match self {
-            Self::ML_KEM_512 => 2,
-            Self::ML_KEM_768 => 2,
-            Self::ML_KEM_1024 => 2,
+            Self::MlKem512 => 2,
+            Self::MlKem768 => 2,
+            Self::MlKem1024 => 2,
         }
     }
     
     /// Get the value of parameter du (compression parameter)
     pub fn du(&self) -> usize {
         match self {
-            Self::ML_KEM_512 => 10,
-            Self::ML_KEM_768 => 10,
-            Self::ML_KEM_1024 => 11,
+            Self::MlKem512 => 10,
+            Self::MlKem768 => 10,
+            Self::MlKem1024 => 11,
         }
     }
     
     /// Get the value of parameter dv (compression parameter)
     pub fn dv(&self) -> usize {
         match self {
-            Self::ML_KEM_512 => 4,
-            Self::ML_KEM_768 => 4,
-            Self::ML_KEM_1024 => 5,
+            Self::MlKem512 => 4,
+            Self::MlKem768 => 4,
+            Self::MlKem1024 => 5,
         }
     }
     
     /// Get the size of the public key in bytes
     pub fn public_key_size(&self) -> usize {
         match self {
-            Self::ML_KEM_512 => 800,
-            Self::ML_KEM_768 => 1184,
-            Self::ML_KEM_1024 => 1568,
+            Self::MlKem512 => 800,
+            Self::MlKem768 => 1184,
+            Self::MlKem1024 => 1568,
         }
     }
     
     /// Get the size of the private key in bytes
     pub fn private_key_size(&self) -> usize {
         match self {
-            Self::ML_KEM_512 => 1632,
-            Self::ML_KEM_768 => 2400,
-            Self::ML_KEM_1024 => 3168,
+            Self::MlKem512 => 1632,
+            Self::MlKem768 => 2400,
+            Self::MlKem1024 => 3168,
         }
     }
     
     /// Get the size of the ciphertext in bytes
     pub fn ciphertext_size(&self) -> usize {
         match self {
-            Self::ML_KEM_512 => 768,
-            Self::ML_KEM_768 => 1088,
-            Self::ML_KEM_1024 => 1568,
+            Self::MlKem512 => 768,
+            Self::MlKem768 => 1088,
+            Self::MlKem1024 => 1568,
         }
     }
     
     /// Get the required RBG security strength in bits
     pub fn required_rbg_strength(&self) -> usize {
         match self {
-            Self::ML_KEM_512 => 128,
-            Self::ML_KEM_768 => 192,
-            Self::ML_KEM_1024 => 256,
+            Self::MlKem512 => 128,
+            Self::MlKem768 => 192,
+            Self::MlKem1024 => 256,
         }
     }
 }

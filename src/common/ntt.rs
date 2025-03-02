@@ -3,7 +3,7 @@
 //! This module contains separate NTT implementations for ML-KEM and ML-DSA,
 //! which use different moduli and parameters.
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 use super::poly::Polynomial;
 
 /// NTT implementation for a specific cryptographic algorithm

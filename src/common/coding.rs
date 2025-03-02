@@ -163,7 +163,7 @@ pub fn decode_poly(bytes: &[u8], bits: usize, ntt_type: NTTType) -> Result<Polyn
 
 /// Encode a polynomial with coefficients in [-a, b]
 pub fn encode_poly_signed(poly: &Polynomial, a: i32, b: i32, ntt_type: NTTType) -> Result<Vec<u8>> {
-    let q = get_modulus_for_ntt_type(ntt_type);
+    let _q = get_modulus_for_ntt_type(ntt_type);
     let bits = bitlen((a + b + 1) as u32);
     let mut bits_array = Vec::with_capacity(256 * bits);
     
@@ -187,7 +187,7 @@ pub fn encode_poly_signed(poly: &Polynomial, a: i32, b: i32, ntt_type: NTTType) 
 
 /// Decode a polynomial with coefficients in [-a, b]
 pub fn decode_poly_signed(bytes: &[u8], a: i32, b: i32, ntt_type: NTTType) -> Result<Polynomial> {
-    let q = get_modulus_for_ntt_type(ntt_type);
+    let _q = get_modulus_for_ntt_type(ntt_type);
     let bits = bitlen((a + b + 1) as u32);
     let mut poly = Polynomial::new();
     let bits_array = bytes_to_bits(bytes);
@@ -216,7 +216,7 @@ pub fn decode_poly_signed(bytes: &[u8], a: i32, b: i32, ntt_type: NTTType) -> Re
 }
 
 /// Encode a polynomial for use in message encoding (d = 1)
-pub fn byte_encode1(poly: &Polynomial, ntt_type: NTTType) -> Result<Vec<u8>> {
+pub fn byte_encode1(poly: &Polynomial, _ntt_type: NTTType) -> Result<Vec<u8>> {
     // For d = 1, each coefficient is 0 or 1
     let mut result = vec![0u8; 32]; // 256 bits = 32 bytes
     
@@ -235,7 +235,7 @@ pub fn byte_encode1(poly: &Polynomial, ntt_type: NTTType) -> Result<Vec<u8>> {
 }
 
 /// Decode a polynomial from bytes (d = 1)
-pub fn byte_decode1(bytes: &[u8], ntt_type: NTTType) -> Result<Polynomial> {
+pub fn byte_decode1(bytes: &[u8], _ntt_type: NTTType) -> Result<Polynomial> {
     if bytes.len() < 32 {
         return Err(Error::EncodingError(format!(
             "Input too short: expected at least 32 bytes, got {}",

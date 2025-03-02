@@ -98,15 +98,15 @@ fn test_ml_dsa_44_deterministic_sign_verify() -> Result<()> {
 #[test]
 fn test_ml_dsa_65_key_generation() -> Result<()> {
     // Generate key pair from seed
-    let keypair = KeyPair::from_seed(&ML_DSA_65_SEED_1, ParameterSet::ML_DSA_65)?;
+    let keypair = KeyPair::from_seed(&ML_DSA_65_SEED_1, ParameterSet::MlDsa65)?;
     
     // Get public and private keys
     let public_key = keypair.public_key();
     let private_key = keypair.private_key();
     
     // Check sizes
-    assert_eq!(public_key.as_bytes().len(), ParameterSet::ML_DSA_65.public_key_size());
-    assert_eq!(private_key.as_bytes().len(), ParameterSet::ML_DSA_65.private_key_size());
+    assert_eq!(public_key.as_bytes().len(), ParameterSet::MlDsa65.public_key_size());
+    assert_eq!(private_key.as_bytes().len(), ParameterSet::MlDsa65.private_key_size());
     
     // Compare with expected test vectors
     assert_eq!(hex::encode(public_key.as_bytes()), ML_DSA_65_PUBLIC_KEY_1);
@@ -118,13 +118,13 @@ fn test_ml_dsa_65_key_generation() -> Result<()> {
 #[test]
 fn test_ml_dsa_87_key_generation() -> Result<()> {
     // Generate key pair from seed
-    let keypair = KeyPair::from_seed(&ML_DSA_87_SEED_1, ParameterSet::ML_DSA_87)?;
+    let keypair = KeyPair::from_seed(&ML_DSA_87_SEED_1, ParameterSet::MlDsa87)?;
     
     // Get public key
     let public_key = keypair.public_key();
     
     // Check size
-    assert_eq!(public_key.as_bytes().len(), ParameterSet::ML_DSA_87.public_key_size());
+    assert_eq!(public_key.as_bytes().len(), ParameterSet::MlDsa87.public_key_size());
     
     // Compare with expected test vector
     assert_eq!(hex::encode(public_key.as_bytes()), ML_DSA_87_PUBLIC_KEY_1);
@@ -136,8 +136,8 @@ fn test_ml_dsa_87_key_generation() -> Result<()> {
 fn test_ml_dsa_all_sign_verify() -> Result<()> {
     for param_set in &[
         ParameterSet::MlDsa44,
-        ParameterSet::ML_DSA_65,
-        ParameterSet::ML_DSA_87
+        ParameterSet::MlDsa65,
+        ParameterSet::MlDsa87
     ] {
         // Generate key pair
         let keypair = KeyPair::generate(*param_set)?;

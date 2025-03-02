@@ -14,9 +14,3 @@ pub mod ring;
 pub mod sample;
 pub mod coding;
 pub mod hash;
-
-// Internal re-exports
-pub(crate) use ntt::NTTContext;
-pub(crate) use poly::Polynomial;
-pub(crate) use ring::{Montgomery, FieldElement};
-pub(crate) use sample::{SampleInBall, RejectionSampler};

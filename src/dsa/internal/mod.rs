@@ -4,12 +4,9 @@
 //! signing, and verification as specified in NIST FIPS 204.
 
 use crate::error::{Error, Result};
-use crate::dsa::{ParameterSet, PublicKey, PrivateKey, Signature, HashFunction};
-use crate::common::{ntt::NTTContext, poly::Polynomial, hash, sample::SampleInBall};
-use zeroize::Zeroize;
+use crate::dsa::{ParameterSet, PublicKey, PrivateKey, HashFunction};
+use crate::common::{ntt::NTTContext, poly::Polynomial, hash};
 use crate::common::ntt::NTTType;
-
-pub mod aux;
 
 /// Generate a keypair from a seed.
 pub(crate) fn seed_to_keypair(seed: &[u8; 32], parameter_set: ParameterSet) -> Result<super::KeyPair> {
@@ -134,7 +131,7 @@ pub(crate) fn ml_dsa_sign_internal(
         let y = expand_mask(&rho_prime, kappa, l, gamma1)?;
         
         // Compute w = Ay
-        let mut w = compute_w(&matrix_a, &y, &ntt_ctx)?;
+        let w = compute_w(&matrix_a, &y, &ntt_ctx)?;
         
         // Decompose w and compute w1
         let mut w1 = Vec::with_capacity(k);
@@ -494,7 +491,7 @@ fn expand_s(sigma: &[u8], l: usize, k: usize, eta: usize) -> Result<(Vec<Polynom
     let mut counter = 0u8;
     
     // Sample s1
-    for i in 0..l {
+    for _i in 0..l {
         let seed = [sigma, &[counter]].concat();
         counter += 1;
         let s1_i = sample_bounded_poly(&seed, eta)?;
@@ -502,7 +499,7 @@ fn expand_s(sigma: &[u8], l: usize, k: usize, eta: usize) -> Result<(Vec<Polynom
     }
     
     // Sample s2
-    for i in 0..k {
+    for _i in 0..k {
         let seed = [sigma, &[counter]].concat();
         counter += 1;
         let s2_i = sample_bounded_poly(&seed, eta)?;
@@ -576,7 +573,7 @@ fn compute_public_t(
         
         // Compute A[i] * s1
         for j in 0..l {
-            let mut prod = ntt_ctx.multiply_ntt(&matrix_a[i][j], &s1_hat[j])?;
+            let prod = ntt_ctx.multiply_ntt(&matrix_a[i][j], &s1_hat[j])?;
             t_i.add_assign(&prod, ntt_ctx.modulus);
         }
         
@@ -734,7 +731,7 @@ fn compute_w(
         
         // Compute A[i] * z
         for j in 0..l {
-            let mut prod = ntt_ctx.multiply_ntt(&matrix_a[i][j], &z_hat[j])?;
+            let prod = ntt_ctx.multiply_ntt(&matrix_a[i][j], &z_hat[j])?;
             w_i.add_assign(&prod, ntt_ctx.modulus);
         }
         
@@ -891,7 +888,7 @@ fn encode_hint(h: &[Polynomial], omega: usize) -> Result<Vec<u8>> {
     
     // Store positions in the result
     let mut idx = 0;
-    for (i, j) in &positions {
+    for (_i, j) in &positions {
         if idx >= omega {
             break;
         }
@@ -930,19 +927,6 @@ fn bytes_to_bits(bytes: &[u8]) -> Vec<u8> {
     bits
 }
 
-/// Convert a bit array to a byte array
-fn bits_to_bytes(bits: &[u8]) -> Vec<u8> {
-    let num_bytes = (bits.len() + 7) / 8;
-    let mut bytes = vec![0u8; num_bytes];
-    
-    for (i, &bit) in bits.iter().enumerate() {
-        if bit != 0 {
-            bytes[i / 8] |= 1 << (i % 8);
-        }
-    }
-    
-    bytes
-}
 
 /// Count the number of 1's in a hint polynomial vector
 fn count_ones(hint: &[Polynomial]) -> usize {
