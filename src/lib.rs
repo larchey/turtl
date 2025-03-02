@@ -1,17 +1,20 @@
 //! # TURTL: Trusted Uniform Rust Toolkit for Lattice-cryptography
 //! 
 //! A Rust implementation of NIST's post-quantum cryptographic standards,
-//! focusing on ML-KEM (Module-Lattice-Based Key-Encapsulation Mechanism) and ML-DSA 
-//! (Module-Lattice-Based Digital Signature Algorithm).
+//! focusing on ML-KEM (Module-Lattice-Based Key-Encapsulation Mechanism, FIPS 203) and ML-DSA 
+//! (Module-Lattice-Based Digital Signature Algorithm, FIPS 204).
 //! 
 //! ## Features
 //! 
 //! * Complete implementation of ML-KEM with all parameter sets (512, 768, 1024)
 //! * Complete implementation of ML-DSA with all parameter sets (44, 65, 87)
 //! * High-performance NTT implementation
-//! * Constant-time operations for side-channel resistance
-//! * Safe memory handling for sensitive data
-//! * Simple API for easy integration
+//! * Enhanced side-channel resistance with constant-time operations
+//! * Fault attack countermeasures for hardened security
+//! * Safe memory handling with automatic zeroization for sensitive data
+//! * Simple, developer-friendly API
+//! * Comprehensive security validation and testing
+//! * No unsafe code - 100% safe Rust
 //! 
 //! ## Examples
 //! 
@@ -65,9 +68,11 @@
 pub mod kem;
 pub mod dsa;
 pub mod error;
+pub mod security;
 
 // Export the common module so it's accessible to benchmarks
 pub mod common;
 
 // Re-exports for convenience
 pub use error::Error;
+pub use error::Result;

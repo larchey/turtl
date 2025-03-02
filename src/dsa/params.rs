@@ -67,11 +67,12 @@ impl ParameterSet {
     }
     
     /// Get the value of parameter gamma2 (low-order rounding range)
+    /// Defined in FIPS 204 as (q-1)/alpha where alpha=88 for ML-DSA-44 and alpha=32 for ML-DSA-65/87
     pub fn gamma2(&self) -> usize {
         match self {
-            Self::MlDsa44 => (8380417 - 1) / 88,
-            Self::MlDsa65 => (8380417 - 1) / 32,
-            Self::MlDsa87 => (8380417 - 1) / 32,
+            Self::MlDsa44 => 95268, // Exact value: (8380417 - 1) / 88
+            Self::MlDsa65 => 261888, // Exact value: (8380417 - 1) / 32
+            Self::MlDsa87 => 261888, // Exact value: (8380417 - 1) / 32
         }
     }
     

@@ -38,6 +38,15 @@ pub enum Error {
     
     /// Encoding error
     EncodingError(String),
+    
+    /// Fault detected during cryptographic operation
+    FaultDetected,
+    
+    /// Invalid input parameter value
+    InvalidParameter(String),
+    
+    /// Security boundary violation
+    SecurityBoundaryViolation,
 }
 
 impl fmt::Display for Error {
@@ -53,6 +62,9 @@ impl fmt::Display for Error {
             Self::VerificationFailed => write!(f, "verification failed"),
             Self::InvalidParameterSet => write!(f, "invalid parameter set"),
             Self::EncodingError(s) => write!(f, "encoding error: {}", s),
+            Self::FaultDetected => write!(f, "fault detected during cryptographic operation"),
+            Self::InvalidParameter(s) => write!(f, "invalid parameter: {}", s),
+            Self::SecurityBoundaryViolation => write!(f, "security boundary violation"),
         }
     }
 }

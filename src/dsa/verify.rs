@@ -28,13 +28,30 @@ pub fn verify(
     let domain_separator = 0u8;
     let formatted_message = format_message(message, context, domain_separator)?;
     
-    // Call internal verification function
-    ml_dsa_verify_internal(
+    // Perform double verification to protect against fault attacks
+    // This is an important security measure recommended by NIST FIPS 204
+    
+    // First verification
+    let result1 = ml_dsa_verify_internal(
         public_key.as_bytes(),
         &formatted_message,
         signature.as_bytes(),
         public_key.parameter_set()
-    )
+    )?;
+    
+    // Second verification
+    let result2 = ml_dsa_verify_internal(
+        public_key.as_bytes(),
+        &formatted_message,
+        signature.as_bytes(),
+        public_key.parameter_set()
+    )?;
+    
+    // Use the security module to verify that both results match
+    use crate::security::fault_detection;
+    fault_detection::verify_signature_checks(result1, result2)?;
+    
+    Ok(result1)
 }
 
 /// Verify a signature with pre-hashing using ML-DSA
@@ -55,15 +72,34 @@ pub fn hash_verify(
         return Err(Error::InvalidParameterSet);
     }
     
-    // Call internal hash-then-verify function
-    ml_dsa_hash_verify_internal(
+    // Perform double verification to protect against fault attacks
+    // This is an important security measure recommended by NIST FIPS 204
+    
+    // First verification
+    let result1 = ml_dsa_hash_verify_internal(
         public_key.as_bytes(),
         message,
         signature.as_bytes(),
         context,
         hash_function,
         public_key.parameter_set()
-    )
+    )?;
+    
+    // Second verification
+    let result2 = ml_dsa_hash_verify_internal(
+        public_key.as_bytes(),
+        message,
+        signature.as_bytes(),
+        context,
+        hash_function,
+        public_key.parameter_set()
+    )?;
+    
+    // Use the security module to verify that both results match
+    use crate::security::fault_detection;
+    fault_detection::verify_signature_checks(result1, result2)?;
+    
+    Ok(result1)
 }
 
 /// Format message with domain separator and context

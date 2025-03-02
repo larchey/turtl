@@ -263,12 +263,42 @@ pub(crate) fn ml_dsa_verify_internal(
     let gamma2 = parameter_set.gamma2();
     let beta = parameter_set.beta();
     let tau = parameter_set.tau();
+    let omega = parameter_set.omega();
     
-    // Check if z is small enough
+    // Verify c_tilde length
+    if c_tilde.len() != parameter_set.lambda() / 4 {
+        return Err(Error::InvalidSignature);
+    }
+    
+    // Check if z is small enough using explicit bounds checking
+    use crate::security::fault_detection;
     for i in 0..l {
-        if z[i].infinity_norm() >= (gamma1 - beta) as i32 {
+        let norm = z[i].infinity_norm();
+        
+        // Verify bounds for z values
+        fault_detection::verify_bounds(
+            norm as usize, 
+            0, 
+            gamma1 - beta - 1
+        ).map_err(|_| Error::InvalidSignature)?;
+        
+        if norm >= (gamma1 - beta) as i32 {
             return Ok(false);
         }
+    }
+    
+    // Validate that the hint vector has at most omega ones
+    let hint_ones = count_ones(&h);
+    
+    // Additional bounds checking for hint
+    fault_detection::verify_bounds(
+        hint_ones,
+        0,
+        omega
+    ).map_err(|_| Error::InvalidSignature)?;
+    
+    if hint_ones > omega {
+        return Err(Error::InvalidSignature);
     }
     
     // Create NTT context
@@ -390,6 +420,19 @@ pub(crate) fn ml_dsa_hash_verify_internal(
     hash_function: HashFunction,
     parameter_set: ParameterSet
 ) -> Result<bool> {
+    // Validate input parameters
+    if context.len() > 255 {
+        return Err(Error::ContextTooLong);
+    }
+    
+    if public_key_bytes.len() != parameter_set.public_key_size() {
+        return Err(Error::InvalidPublicKey);
+    }
+    
+    if signature_bytes.len() < parameter_set.lambda() / 4 {
+        return Err(Error::InvalidSignature);
+    }
+    
     // Format with domain separator 1 (for pre-hash)
     let domain_separator = 1u8;
     
@@ -402,13 +445,25 @@ pub(crate) fn ml_dsa_hash_verify_internal(
     // Get OID for hash function
     let oid = get_hash_function_oid(hash_function);
     
-    // Compute hash of message
+    // Compute hash of message using the specified hash function
     let message_hash = match hash_function {
         HashFunction::SHA3_256 => hash::sha3_256(message).to_vec(),
         HashFunction::SHA3_512 => hash::sha3_512(message).to_vec(),
         HashFunction::SHAKE128 => hash::shake128(message, 32),
         HashFunction::SHAKE256 => hash::shake256(message, 32),
     };
+    
+    // Verify the hash output is of the expected length
+    let expected_hash_length = match hash_function {
+        HashFunction::SHA3_256 => 32,
+        HashFunction::SHA3_512 => 64,
+        HashFunction::SHAKE128 => 32,
+        HashFunction::SHAKE256 => 32,
+    };
+    
+    if message_hash.len() != expected_hash_length {
+        return Err(Error::RandomnessError);
+    }
     
     // Create pre-hashed message
     let mut pre_hashed = Vec::with_capacity(ctx_header.len() + oid.len() + message_hash.len());
@@ -759,17 +814,42 @@ fn decompose(poly: &Polynomial, gamma2: usize) -> Result<(Polynomial, Polynomial
 }
 
 /// Decompose a single coefficient
+/// 
+/// This function decomposes a coefficient r into r1 and r0 such that:
+///   r = r1 * 2 * alpha + r0, where r0 is in the range [-alpha, alpha)
+/// 
+/// This is used in ML-DSA for various operations like hint generation and verification.
 fn decompose_coefficient(r: i32, alpha: usize) -> (i32, i32) {
+    use crate::security::fault_detection;
+    
+    // Validate alpha is within a reasonable range to prevent errors
+    // ML-DSA specifies alpha is either 88 (for ML-DSA-44) or 32 (for ML-DSA-65/87)
+    // This should be checked at a higher level, but we add a defensive check here
+    let _ = fault_detection::verify_bounds(alpha, 1, 1000000)
+        .expect("Alpha value is out of range");
+    
+    // Compute 2*alpha safely, checking for overflow
+    let two_alpha = match (alpha as i32).checked_mul(2) {
+        Some(val) => val,
+        None => panic!("Arithmetic overflow in decompose_coefficient"),
+    };
+    
     // Centered remainder modulo 2*alpha
-    let mut r0 = r % (2 * alpha as i32);
+    let mut r0 = r % two_alpha;
     if r0 > alpha as i32 {
-        r0 -= 2 * alpha as i32;
+        r0 -= two_alpha;
     } else if r0 < -(alpha as i32) {
-        r0 += 2 * alpha as i32;
+        r0 += two_alpha;
     }
     
+    // Ensure r0 is in the range [-alpha, alpha)
+    debug_assert!(r0 >= -(alpha as i32) && r0 < (alpha as i32));
+    
     // Quotient
-    let r1 = (r - r0) / (2 * alpha as i32);
+    let r1 = (r - r0) / two_alpha;
+    
+    // Verify decomposition is correct
+    debug_assert_eq!(r, r1 * two_alpha + r0, "Decomposition failed");
     
     (r1, r0)
 }
