@@ -1223,9 +1223,9 @@ fn encode_private_key(
     
     // Calculate sizes
     let s_max_value = eta as u32;
-    let s_bits_per_coeff = bitlen(2 * s_max_value);
+    let _s_bits_per_coeff = bitlen(2 * s_max_value);
     #[cfg(test)]
-    let s_size = (l + k) * ((256 * s_bits_per_coeff + 7) / 8);
+    let s_size = (l + k) * ((256 * _s_bits_per_coeff + 7) / 8);
     
     let t0_max_value = (1 << d) - 1;
     let t0_bits_per_coeff = bitlen(t0_max_value);
@@ -1340,8 +1340,8 @@ fn decode_private_key(
     
     // Calculate sizes
     let s_max_value = eta as u32;
-    let s_bits_per_coeff = bitlen(2 * s_max_value);
-    let s_bytes_per_poly = (256 * s_bits_per_coeff + 7) / 8;
+    let _s_bits_per_coeff = bitlen(2 * s_max_value);
+    let s_bytes_per_poly = (256 * _s_bits_per_coeff + 7) / 8;
     
     let t0_max_value = (1 << d) - 1;
     let t0_bits_per_coeff = bitlen(t0_max_value);
@@ -1676,7 +1676,7 @@ fn encode_signature(
     h: &[Polynomial],
     parameter_set: ParameterSet
 ) -> Result<Vec<u8>> {
-    let (k, l) = parameter_set.dimensions();
+    let (_k, l) = parameter_set.dimensions();
     let gamma1 = parameter_set.gamma1();
     let omega = parameter_set.omega();
     #[cfg(test)]
@@ -1684,13 +1684,13 @@ fn encode_signature(
     
     // Calculate signature size
     let z_bits_per_coeff = bitlen((2 * gamma1 - 2) as u32);
-    let z_bytes_per_poly = (256 * z_bits_per_coeff + 7) / 8;
+    let _z_bytes_per_poly = (256 * z_bits_per_coeff + 7) / 8;
     #[cfg(test)]
-    let z_size = l * z_bytes_per_poly;
+    let z_size = l * _z_bytes_per_poly;
     
     // Calculate hint size
     #[cfg(test)]
-    let h_size = omega + k;
+    let h_size = omega + _k;
     
     // Calculate the signature size
     #[cfg(test)]

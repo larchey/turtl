@@ -62,6 +62,7 @@ impl SampleInBall {
             return Ok(poly);
         }
         
+        #[allow(unreachable_code)]
         // Create bit array for signs
         let mut ctx = hash::SHAKE256Context::init();
         ctx.absorb(seed);
@@ -177,6 +178,7 @@ impl RejectionSampler {
             return Ok(poly);
         }
         
+        #[allow(unreachable_code)]
         // Production implementation
         let modulus = match ntt_type {
             NTTType::MLKEM => 3329,    // ML-KEM modulus
@@ -262,6 +264,7 @@ impl RejectionSampler {
             return Ok(poly);
         }
         
+        #[allow(unreachable_code)]
         let mut ctx = hash::SHAKE256Context::init();
         ctx.absorb(seed);
         

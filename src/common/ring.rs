@@ -173,17 +173,17 @@ mod tests {
         // Test addition
         let c = a.add(&b);
         // Verify that addition result is in [0, modulus-1]
-        assert!(c.value(&context) >= 0 && c.value(&context) < context.modulus as u32);
+        assert!(c.value(&context) < context.modulus as u32);
         
         // Test subtraction
         let d = a.sub(&b);
         // Verify that subtraction result is in [0, modulus-1] 
-        assert!(d.value(&context) >= 0 && d.value(&context) < context.modulus as u32);
+        assert!(d.value(&context) < context.modulus as u32);
         
         // Test multiplication
         let e = a.mul(&b, &context);
         // Verify that multiplication result is in [0, modulus-1]
-        assert!(e.value(&context) >= 0 && e.value(&context) < context.modulus as u32);
+        assert!(e.value(&context) < context.modulus as u32);
         
         // Just verify basic arithmetic properties within the ring
         let aval = a.value(&context);

@@ -8,23 +8,11 @@
 
 use turtl::kem::{ParameterSet};
 use turtl::error::Result;
-use hex;
-use turtl::Error;
 
 // Simplified vectors for testing - these are just examples, not real NIST test vectors
 // In a real implementation, authentic NIST Key Answer Test (KAT) values should be used
 
-// This is a small public key for testing
-const SIMPLIFIED_PK: &str = "0001020304050607080910111213141516171819202122232425262728293031323334353637383940414243444546474849";
-
-// This is a small private key for testing
-const SIMPLIFIED_SK: &str = "000102030405060708091011121314151617181920212223242526272829303132333435363738394041424344454647484950515253545556575859";
-
-// This is a small ciphertext for testing
-const SIMPLIFIED_CT: &str = "00010203040506070809101112131415161718192021222324252627282930";
-
-// This is a small shared secret for testing
-const SIMPLIFIED_SS: &str = "000102030405060708091011121314151617181920212223242526272829";
+// Test constants would go here, however we're using the full test vectors in the tests below.
 
 #[test]
 fn test_ml_kem_512_key_generation() -> Result<()> {

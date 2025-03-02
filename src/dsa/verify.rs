@@ -3,7 +3,7 @@
 //! This module implements the verification algorithms for ML-DSA.
 
 use crate::error::{Error, Result};
-use super::{PublicKey, Signature, HashFunction, ParameterSet};
+use super::{PublicKey, Signature, HashFunction};
 use super::internal::{ml_dsa_verify_internal, ml_dsa_hash_verify_internal};
 
 /// Verify a signature using ML-DSA
@@ -16,7 +16,7 @@ pub fn verify(
     #[cfg(test)]
     {
         // For test parameter set, use a simplified implementation
-        if let ParameterSet::TestSmall = public_key.parameter_set() {
+        if let super::ParameterSet::TestSmall = public_key.parameter_set() {
             // In test mode, handle special cases for the tests
             
             // Special case for test_verify_invalid_signature - this should return false
@@ -86,7 +86,7 @@ pub fn hash_verify(
     #[cfg(test)]
     {
         // For test parameter set, use a simplified implementation
-        if let ParameterSet::TestSmall = public_key.parameter_set() {
+        if let super::ParameterSet::TestSmall = public_key.parameter_set() {
             // Just delegate to the regular verify function for tests
             // with extended context to match hash_sign
             let mut extended_context = Vec::new();
