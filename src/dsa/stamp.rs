@@ -69,7 +69,7 @@ mod tests {
     #[test]
     fn test_stamp_document() -> Result<()> {
         // Generate a key pair
-        let (public_key, private_key) = key_gen(ParameterSet::ML_DSA_44)?;
+        let (public_key, private_key) = key_gen(ParameterSet::MlDsa44)?;
         
         // Create a stamp
         let stamp = Stamp::new(private_key);
@@ -90,7 +90,7 @@ mod tests {
     #[test]
     fn test_stamp_with_context() -> Result<()> {
         // Generate a key pair
-        let (public_key, private_key) = key_gen(ParameterSet::ML_DSA_44)?;
+        let (public_key, private_key) = key_gen(ParameterSet::MlDsa44)?;
         
         // Create a stamp with context
         let context = b"TURTL context";

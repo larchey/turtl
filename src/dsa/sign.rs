@@ -102,7 +102,7 @@ mod tests {
     #[test]
     fn test_sign_verify() -> Result<()> {
         // Generate a key pair
-        let (public_key, private_key) = key_gen(ParameterSet::ML_DSA_44)?;
+        let (public_key, private_key) = key_gen(ParameterSet::MlDsa44)?;
         
         // Test message
         let message = b"TURTL test message";
@@ -121,7 +121,7 @@ mod tests {
     #[test]
     fn test_deterministic_signing() -> Result<()> {
         // Generate a key pair
-        let (public_key, private_key) = key_gen(ParameterSet::ML_DSA_44)?;
+        let (public_key, private_key) = key_gen(ParameterSet::MlDsa44)?;
         
         // Test message
         let message = b"TURTL deterministic signature test";

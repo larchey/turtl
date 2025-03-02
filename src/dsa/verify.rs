@@ -93,7 +93,7 @@ mod tests {
     #[test]
     fn test_verify_valid_signature() -> Result<()> {
         // Generate a key pair
-        let (public_key, private_key) = key_gen(ParameterSet::ML_DSA_44)?;
+        let (public_key, private_key) = key_gen(ParameterSet::MlDsa44)?;
         
         // Test message
         let message = b"TURTL test message";
@@ -112,7 +112,7 @@ mod tests {
     #[test]
     fn test_verify_invalid_signature() -> Result<()> {
         // Generate a key pair
-        let (public_key, private_key) = key_gen(ParameterSet::ML_DSA_44)?;
+        let (public_key, private_key) = key_gen(ParameterSet::MlDsa44)?;
         
         // Test message
         let message = b"TURTL test message";

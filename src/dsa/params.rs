@@ -10,7 +10,7 @@ use zeroize::Zeroize;
 pub enum ParameterSet {
     /// ML-DSA-44 (Security Category 2)
     #[default]
-    ML_DSA_44,
+    MlDsa44,
     /// ML-DSA-65 (Security Category 3)
     ML_DSA_65,
     /// ML-DSA-87 (Security Category 5)
@@ -32,7 +32,7 @@ impl ParameterSet {
     /// Get the dimensions (k, l) of matrix A
     pub fn dimensions(&self) -> (usize, usize) {
         match self {
-            Self::ML_DSA_44 => (4, 4),
+            Self::MlDsa44 => (4, 4),
             Self::ML_DSA_65 => (6, 5),
             Self::ML_DSA_87 => (8, 7),
         }
@@ -51,7 +51,7 @@ impl ParameterSet {
     /// Get the value of parameter tau (number of ±1's in challenge polynomial)
     pub fn tau(&self) -> usize {
         match self {
-            Self::ML_DSA_44 => 39,
+            Self::MlDsa44 => 39,
             Self::ML_DSA_65 => 49,
             Self::ML_DSA_87 => 60,
         }
@@ -60,7 +60,7 @@ impl ParameterSet {
     /// Get the value of parameter gamma1 (coefficient range for mask vector)
     pub fn gamma1(&self) -> usize {
         match self {
-            Self::ML_DSA_44 => 1 << 17,
+            Self::MlDsa44 => 1 << 17,
             Self::ML_DSA_65 => 1 << 19,
             Self::ML_DSA_87 => 1 << 19,
         }
@@ -69,7 +69,7 @@ impl ParameterSet {
     /// Get the value of parameter gamma2 (low-order rounding range)
     pub fn gamma2(&self) -> usize {
         match self {
-            Self::ML_DSA_44 => (8380417 - 1) / 88,
+            Self::MlDsa44 => (8380417 - 1) / 88,
             Self::ML_DSA_65 => (8380417 - 1) / 32,
             Self::ML_DSA_87 => (8380417 - 1) / 32,
         }
@@ -78,7 +78,7 @@ impl ParameterSet {
     /// Get the value of parameter eta (private key range)
     pub fn eta(&self) -> usize {
         match self {
-            Self::ML_DSA_44 => 2,
+            Self::MlDsa44 => 2,
             Self::ML_DSA_65 => 4,
             Self::ML_DSA_87 => 2,
         }
@@ -92,7 +92,7 @@ impl ParameterSet {
     /// Get the value of parameter omega (max number of 1's in the hint)
     pub fn omega(&self) -> usize {
         match self {
-            Self::ML_DSA_44 => 80,
+            Self::MlDsa44 => 80,
             Self::ML_DSA_65 => 55,
             Self::ML_DSA_87 => 75,
         }
@@ -101,7 +101,7 @@ impl ParameterSet {
     /// Get the size of the commitment challenge hash in bytes
     pub fn lambda(&self) -> usize {
         match self {
-            Self::ML_DSA_44 => 128,
+            Self::MlDsa44 => 128,
             Self::ML_DSA_65 => 192,
             Self::ML_DSA_87 => 256,
         }
@@ -110,7 +110,7 @@ impl ParameterSet {
     /// Get the size of the public key in bytes
     pub fn public_key_size(&self) -> usize {
         match self {
-            Self::ML_DSA_44 => 1312,
+            Self::MlDsa44 => 1312,
             Self::ML_DSA_65 => 1952,
             Self::ML_DSA_87 => 2592,
         }
@@ -119,7 +119,7 @@ impl ParameterSet {
     /// Get the size of the private key in bytes
     pub fn private_key_size(&self) -> usize {
         match self {
-            Self::ML_DSA_44 => 2560,
+            Self::MlDsa44 => 2560,
             Self::ML_DSA_65 => 4032,
             Self::ML_DSA_87 => 4896,
         }
@@ -128,7 +128,7 @@ impl ParameterSet {
     /// Get the size of the signature in bytes
     pub fn signature_size(&self) -> usize {
         match self {
-            Self::ML_DSA_44 => 2420,
+            Self::MlDsa44 => 2420,
             Self::ML_DSA_65 => 3309,
             Self::ML_DSA_87 => 4627,
         }
@@ -137,7 +137,7 @@ impl ParameterSet {
     /// Get the security category
     pub fn security_category(&self) -> usize {
         match self {
-            Self::ML_DSA_44 => 2,
+            Self::MlDsa44 => 2,
             Self::ML_DSA_65 => 3,
             Self::ML_DSA_87 => 5,
         }
@@ -146,7 +146,7 @@ impl ParameterSet {
     /// Get the required RBG security strength in bits
     pub fn required_rbg_strength(&self) -> usize {
         match self {
-            Self::ML_DSA_44 => 192, // Recommended: 192, Minimum: 128
+            Self::MlDsa44 => 192, // Recommended: 192, Minimum: 128
             Self::ML_DSA_65 => 192,
             Self::ML_DSA_87 => 256,
         }

@@ -53,15 +53,15 @@ const ML_DSA_87_PUBLIC_KEY_1: &str = "acaef18d5f6b5e80a56f2f39bbb548d3eb8bbb9c8d
 #[test]
 fn test_ml_dsa_44_key_generation() -> Result<()> {
     // Generate key pair from seed
-    let keypair = KeyPair::from_seed(&ML_DSA_44_SEED_1, ParameterSet::ML_DSA_44)?;
+    let keypair = KeyPair::from_seed(&ML_DSA_44_SEED_1, ParameterSet::MlDsa44)?;
     
     // Get public and private keys
     let public_key = keypair.public_key();
     let private_key = keypair.private_key();
     
     // Check sizes
-    assert_eq!(public_key.as_bytes().len(), ParameterSet::ML_DSA_44.public_key_size());
-    assert_eq!(private_key.as_bytes().len(), ParameterSet::ML_DSA_44.private_key_size());
+    assert_eq!(public_key.as_bytes().len(), ParameterSet::MlDsa44.public_key_size());
+    assert_eq!(private_key.as_bytes().len(), ParameterSet::MlDsa44.private_key_size());
     
     // Compare with expected test vectors
     assert_eq!(hex::encode(public_key.as_bytes()), ML_DSA_44_PUBLIC_KEY_1);
@@ -73,17 +73,17 @@ fn test_ml_dsa_44_key_generation() -> Result<()> {
 #[test]
 fn test_ml_dsa_44_deterministic_sign_verify() -> Result<()> {
     // Generate key pair from seed
-    let keypair = KeyPair::from_seed(&ML_DSA_44_SEED_1, ParameterSet::ML_DSA_44)?;
+    let keypair = KeyPair::from_seed(&ML_DSA_44_SEED_1, ParameterSet::MlDsa44)?;
     
     // Create public key from test vectors
-    let public_key = PublicKey::new(hex::decode(ML_DSA_44_PUBLIC_KEY_1).map_err(|e| Error::EncodingError(e.to_string()))?, ParameterSet::ML_DSA_44)?;
+    let public_key = PublicKey::new(hex::decode(ML_DSA_44_PUBLIC_KEY_1).map_err(|e| Error::EncodingError(e.to_string()))?, ParameterSet::MlDsa44)?;
     
     // Sign message deterministically
     let context = b"";
     let signature = dsa::sign(&keypair.private_key(), ML_DSA_44_MESSAGE_1, context, SigningMode::Deterministic)?;
     
     // Check signature size
-    assert_eq!(signature.as_bytes().len(), ParameterSet::ML_DSA_44.signature_size());
+    assert_eq!(signature.as_bytes().len(), ParameterSet::MlDsa44.signature_size());
     
     // Compare with expected signature
     assert_eq!(hex::encode(signature.as_bytes()), ML_DSA_44_SIGNATURE_1);
@@ -135,7 +135,7 @@ fn test_ml_dsa_87_key_generation() -> Result<()> {
 #[test]
 fn test_ml_dsa_all_sign_verify() -> Result<()> {
     for param_set in &[
-        ParameterSet::ML_DSA_44,
+        ParameterSet::MlDsa44,
         ParameterSet::ML_DSA_65,
         ParameterSet::ML_DSA_87
     ] {
@@ -167,7 +167,7 @@ fn test_ml_dsa_all_sign_verify() -> Result<()> {
 #[test]
 fn test_deterministic_signing() -> Result<()> {
     // Generate key pair
-    let keypair = KeyPair::generate(ParameterSet::ML_DSA_44)?;
+    let keypair = KeyPair::generate(ParameterSet::MlDsa44)?;
     
     // Sign message with deterministic mode
     let message = b"Test message for deterministic signing";
@@ -189,7 +189,7 @@ fn test_deterministic_signing() -> Result<()> {
 #[test]
 fn test_context_strings() -> Result<()> {
     // Generate key pair
-    let keypair = KeyPair::generate(ParameterSet::ML_DSA_44)?;
+    let keypair = KeyPair::generate(ParameterSet::MlDsa44)?;
     
     // Sign with a context string
     let message = b"Test message with context";
