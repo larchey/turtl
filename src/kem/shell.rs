@@ -27,11 +27,13 @@ impl Shell {
     
     /// Derive an encryption key for AES-256
     pub fn derive_encryption_key(&self) -> [u8; 32] {
-        let mut context = [0u8; 8];
-        context[0..7].copy_from_slice(b"enc-key");
+        // Create a context with proper length and null termination
+        let context = b"enc-key\0";
         
         let mut result = [0u8; 32];
-        let derived = shake256(&[&context[..], self.shared_secret.as_bytes()].concat(), 32);
+        // Combine context and shared secret for derivation
+        let input = [context.as_ref(), self.shared_secret.as_bytes()].concat();
+        let derived = shake256(&input, 32);
         result.copy_from_slice(&derived);
         
         result
@@ -39,11 +41,13 @@ impl Shell {
     
     /// Derive an authentication key for HMAC
     pub fn derive_authentication_key(&self) -> [u8; 32] {
-        let mut context = [0u8; 8];
-        context[0..7].copy_from_slice(b"auth-key");
+        // Create a context with proper length and null termination
+        let context = b"auth-key\0";
         
         let mut result = [0u8; 32];
-        let derived = shake256(&[&context[..], self.shared_secret.as_bytes()].concat(), 32);
+        // Combine context and shared secret for derivation
+        let input = [context.as_ref(), self.shared_secret.as_bytes()].concat();
+        let derived = shake256(&input, 32);
         result.copy_from_slice(&derived);
         
         result
@@ -51,10 +55,12 @@ impl Shell {
     
     /// Derive multiple keys at once
     pub fn derive_key_pair(&self) -> ([u8; 32], [u8; 32]) {
-        let mut context = [0u8; 8];
-        context[0..7].copy_from_slice(b"key-pair");
+        // Create a context with proper length and null termination
+        let context = b"key-pair\0";
         
-        let derived = shake256(&[&context[..], self.shared_secret.as_bytes()].concat(), 64);
+        // Combine context and shared secret for derivation
+        let input = [context.as_ref(), self.shared_secret.as_bytes()].concat();
+        let derived = shake256(&input, 64);
         
         let mut key1 = [0u8; 32];
         let mut key2 = [0u8; 32];
