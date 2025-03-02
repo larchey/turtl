@@ -5,6 +5,7 @@
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
 use turtl::common::ntt::NTTContext;
+use turtl::common::ntt::NTTType; // Added explicit import for NTTType
 use turtl::common::poly::Polynomial;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;

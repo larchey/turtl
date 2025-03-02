@@ -2,15 +2,30 @@
 //! 
 //! This module defines the parameter sets for ML-DSA as specified in NIST FIPS 204.
 
+// We'll bring in Copy, Default, and Sized which ParameterSet already implements
+use zeroize::Zeroize;
+
 /// ML-DSA parameter sets
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum ParameterSet {
     /// ML-DSA-44 (Security Category 2)
+    #[default]
     ML_DSA_44,
     /// ML-DSA-65 (Security Category 3)
     ML_DSA_65,
     /// ML-DSA-87 (Security Category 5)
     ML_DSA_87,
+}
+
+// Create a newtype wrapper for ParameterSet to avoid the conflicting impl
+// of Zeroize for types that implement DefaultIsZeroes
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ZeroizeParameterSet(pub ParameterSet);
+
+impl Zeroize for ZeroizeParameterSet {
+    fn zeroize(&mut self) {
+        self.0 = ParameterSet::default();
+    }
 }
 
 impl ParameterSet {

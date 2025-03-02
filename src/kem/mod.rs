@@ -16,13 +16,29 @@ mod internal;
 pub use params::ParameterSet;
 pub use keypair::KeyPair;
 
+// Import ZeroizeParameterSet
+use params::ZeroizeParameterSet;
+
 /// ML-KEM public key (encapsulation key)
-#[derive(Clone, Debug, Zeroize)]
+#[derive(Clone, Debug)]
 pub struct PublicKey {
     /// Raw byte representation of the public key
     bytes: Vec<u8>,
     /// Parameter set associated with this key
     parameter_set: ParameterSet,
+    // Add a ZeroizeParameterSet for zeroizing
+    #[doc(hidden)]
+    _zeroize_param: ZeroizeParameterSet,
+}
+
+// Manual implementation of Zeroize
+impl Zeroize for PublicKey {
+    fn zeroize(&mut self) {
+        self.bytes.zeroize();
+        // parameter_set doesn't need to be zeroized as it's Copy and doesn't contain secrets
+        // But _zeroize_param will be zeroized
+        self._zeroize_param.zeroize();
+    }
 }
 
 impl PublicKey {
@@ -37,6 +53,7 @@ impl PublicKey {
         Ok(Self {
             bytes,
             parameter_set,
+            _zeroize_param: ZeroizeParameterSet(parameter_set),
         })
     }
     
@@ -52,13 +69,29 @@ impl PublicKey {
 }
 
 /// ML-KEM private key (decapsulation key)
-#[derive(Clone, Debug, Zeroize, ZeroizeOnDrop)]
+#[derive(Clone, Debug)]
 pub struct PrivateKey {
     /// Raw byte representation of the private key
     bytes: Vec<u8>,
     /// Parameter set associated with this key
     parameter_set: ParameterSet,
+    // Add a ZeroizeParameterSet for zeroizing
+    #[doc(hidden)]
+    _zeroize_param: ZeroizeParameterSet,
 }
+
+// Manual implementation of Zeroize
+impl Zeroize for PrivateKey {
+    fn zeroize(&mut self) {
+        self.bytes.zeroize();
+        // parameter_set doesn't need to be zeroized as it's Copy and doesn't contain secrets
+        // But _zeroize_param will be zeroized
+        self._zeroize_param.zeroize();
+    }
+}
+
+// Implement ZeroizeOnDrop manually
+impl ZeroizeOnDrop for PrivateKey {}
 
 impl PrivateKey {
     /// Create a new private key from raw bytes
@@ -72,6 +105,7 @@ impl PrivateKey {
         Ok(Self {
             bytes,
             parameter_set,
+            _zeroize_param: ZeroizeParameterSet(parameter_set),
         })
     }
     
@@ -87,12 +121,25 @@ impl PrivateKey {
 }
 
 /// ML-KEM ciphertext
-#[derive(Clone, Debug, Zeroize)]
+#[derive(Clone, Debug)]
 pub struct Ciphertext {
     /// Raw byte representation of the ciphertext
     bytes: Vec<u8>,
     /// Parameter set associated with this ciphertext
     parameter_set: ParameterSet,
+    // Add a ZeroizeParameterSet for zeroizing
+    #[doc(hidden)]
+    _zeroize_param: ZeroizeParameterSet,
+}
+
+// Manual implementation of Zeroize
+impl Zeroize for Ciphertext {
+    fn zeroize(&mut self) {
+        self.bytes.zeroize();
+        // parameter_set doesn't need to be zeroized as it's Copy and doesn't contain secrets
+        // But _zeroize_param will be zeroized
+        self._zeroize_param.zeroize();
+    }
 }
 
 impl Ciphertext {
@@ -107,6 +154,7 @@ impl Ciphertext {
         Ok(Self {
             bytes,
             parameter_set,
+            _zeroize_param: ZeroizeParameterSet(parameter_set),
         })
     }
     
@@ -122,11 +170,21 @@ impl Ciphertext {
 }
 
 /// ML-KEM shared secret
-#[derive(Clone, Debug, Zeroize, ZeroizeOnDrop, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SharedSecret {
     /// Raw byte representation of the shared secret
     bytes: [u8; 32],
 }
+
+// Manual implementation of Zeroize
+impl Zeroize for SharedSecret {
+    fn zeroize(&mut self) {
+        self.bytes.zeroize();
+    }
+}
+
+// Implement ZeroizeOnDrop manually
+impl ZeroizeOnDrop for SharedSecret {}
 
 impl SharedSecret {
     /// Create a new shared secret from raw bytes

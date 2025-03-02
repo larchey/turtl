@@ -2,15 +2,30 @@
 //! 
 //! This module defines the parameter sets for ML-KEM as specified in NIST FIPS 203.
 
+// We'll bring in Copy, Default, and Sized which ParameterSet already implements
+use zeroize::Zeroize;
+
 /// ML-KEM parameter sets
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum ParameterSet {
     /// ML-KEM-512 (Security Category 1)
+    #[default]
     ML_KEM_512,
     /// ML-KEM-768 (Security Category 3)
     ML_KEM_768,
     /// ML-KEM-1024 (Security Category 5)
     ML_KEM_1024,
+}
+
+// Create a newtype wrapper for ParameterSet to avoid the conflicting impl
+// of Zeroize for types that implement DefaultIsZeroes
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ZeroizeParameterSet(pub ParameterSet);
+
+impl Zeroize for ZeroizeParameterSet {
+    fn zeroize(&mut self) {
+        self.0 = ParameterSet::default();
+    }
 }
 
 impl ParameterSet {

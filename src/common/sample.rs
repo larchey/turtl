@@ -257,7 +257,7 @@ mod tests {
         
         // Check that coefficients are in the correct range
         for i in 0..256 {
-            assert!(poly.coeffs[i] >= -eta as i32 && poly.coeffs[i] <= eta as i32);
+            assert!(poly.coeffs[i] >= -(eta as i32) && poly.coeffs[i] <= eta as i32);
         }
     }
     

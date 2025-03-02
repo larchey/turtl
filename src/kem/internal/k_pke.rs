@@ -5,8 +5,7 @@
 
 use crate::error::{Error, Result};
 use crate::kem::ParameterSet;
-use crate::common::{ntt::NTTContext, poly::Polynomial, hash, sample::SampleInBall};
-use zeroize::Zeroize;
+use crate::common::{ntt::NTTContext, poly::Polynomial, hash};
 use crate::common::ntt::NTTType;
 
 use super::aux;
@@ -353,7 +352,7 @@ pub(crate) fn decrypt(
     let c2 = &ciphertext[c1_len..];
     
     let u_prime = decompress_vector(&byte_decode_vector(c1, du)?, du)?;
-    let v_prime = decompress(&byte_decode(c2, dv as u32)?, dv as u32)?;
+    let v_prime = decompress(&byte_decode(c2, dv as u32)?, dv)?;
     
     // 5. Decode private key
     let s = decode_s_from_private_key(private_key, parameter_set)?;

@@ -66,8 +66,8 @@ pub mod kem;
 pub mod dsa;
 pub mod error;
 
-// Internal modules
-mod common;
+// Export the common module so it's accessible to benchmarks
+pub mod common;
 
 // Re-exports for convenience
 pub use error::Error;

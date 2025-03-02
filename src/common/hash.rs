@@ -4,8 +4,6 @@
 //! used in both ML-KEM and ML-DSA algorithms.
 
 use sha3::{Shake128, Shake256, Sha3_256, Sha3_512, Digest, digest::{Update, ExtendableOutput, XofReader}};
-use crate::error::{Error, Result};
-use sha3::digest::Update;
 
 /// Hash/XOF function type
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

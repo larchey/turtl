@@ -201,7 +201,7 @@ pub(crate) fn ml_dsa_sign_internal(
         // Check if r0 is small enough
         let mut r0_ok = true;
         for i in 0..k {
-            if r0[i].infinity_norm() >= gamma2 - beta {
+            if r0[i].infinity_norm() >= (gamma2 - beta) as i32 {
                 r0_ok = false;
                 break;
             }
@@ -332,8 +332,11 @@ pub(crate) fn ml_dsa_verify_internal(
     let w1_encoded = encode_w1(&w1)?;
     
     // Compute c' = H(mu || w1)
-    let c_prime = hash::h_function(&[&mu, &w1_encoded].concat(), parameter_set.lambda() / 4);
-    
+    let mut c_prime_data = Vec::new();
+    c_prime_data.extend_from_slice(&mu);
+    c_prime_data.extend_from_slice(&w1_encoded);
+    let c_prime = hash::h_function(&c_prime_data, parameter_set.lambda() / 4);
+        
     // Compare c_tilde and c_prime
     if c_tilde == c_prime {
         Ok(true)

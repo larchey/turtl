@@ -4,9 +4,7 @@
 //! verification operations for each ML-DSA parameter set.
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
-use turtl::dsa::{self, ParameterSet, KeyPair, PublicKey, PrivateKey, Signature, SigningMode};
-use turtl::error::Result;
-
+use turtl::dsa::{self, ParameterSet, KeyPair, SigningMode};
 pub fn ml_dsa_keygen_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("ML-DSA Key Generation");
     

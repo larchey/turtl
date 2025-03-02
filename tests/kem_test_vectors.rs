@@ -3,9 +3,10 @@
 //! This module contains official test vectors for ML-KEM key generation,
 //! encapsulation, and decapsulation as specified in FIPS 203.
 
-use turtl::kem::{self, ParameterSet, KeyPair, PublicKey, PrivateKey, Ciphertext, SharedSecret};
+use turtl::kem::{self, ParameterSet, KeyPair, PublicKey, Ciphertext, SharedSecret};
 use turtl::error::Result;
 use hex;
+use turtl::Error;
 
 // Official NIST test vectors for ML-KEM-512
 // These are derived from the NIST FIPS 203 validation test data
@@ -83,11 +84,18 @@ fn test_ml_kem_512_deterministic_encaps_decaps() -> Result<()> {
     let keypair = KeyPair::from_seed(&ML_KEM_512_SEED_1, ParameterSet::ML_KEM_512)?;
     
     // Create public key and ciphertext from test vectors
-    let public_key = PublicKey::new(hex::decode(ML_KEM_512_PK_1)?, ParameterSet::ML_KEM_512)?;
-    let ciphertext = Ciphertext::new(hex::decode(ML_KEM_512_CT_1)?, ParameterSet::ML_KEM_512)?;
+    let public_key = PublicKey::new(
+        hex::decode(ML_KEM_512_PK_1).map_err(|e| Error::EncodingError(e.to_string()))?, 
+        ParameterSet::ML_KEM_512
+    )?;
+    
+    let ciphertext = Ciphertext::new(
+        hex::decode(ML_KEM_512_CT_1).map_err(|e| Error::EncodingError(e.to_string()))?, 
+        ParameterSet::ML_KEM_512
+    )?;
     
     // Expected shared secret
-    let expected_ss = hex::decode(ML_KEM_512_SS_1)?;
+    let expected_ss = hex::decode(ML_KEM_512_SS_1).map_err(|e| Error::EncodingError(e.to_string()))?;
     let mut expected_ss_array = [0u8; 32];
     expected_ss_array.copy_from_slice(&expected_ss);
     let expected_shared_secret = SharedSecret::new(expected_ss_array);

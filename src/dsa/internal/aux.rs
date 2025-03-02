@@ -2,9 +2,7 @@
 //! 
 //! This module provides helper functions used in the ML-DSA implementation.
 
-use crate::error::{Error, Result};
 use crate::common::poly::Polynomial;
-use crate::dsa::ParameterSet;
 
 /// Convert from Montgomery form to standard form
 pub(crate) fn from_montgomery(x: i32, q: i32, qinv: i32) -> i32 {

@@ -1,56 +1,45 @@
 //! Error types for the TURTL library.
 
+#[cfg(feature = "std")]
+use std::fmt;
+
+#[cfg(not(feature = "std"))]
 use core::fmt;
 
-#[cfg(feature = "std")]
-use thiserror::Error;
-
 /// Error type for the TURTL library
-#[cfg_attr(feature = "std", derive(Error))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Error {
     /// Randomness generation failed
-    #[cfg_attr(feature = "std", error("randomness generation failed"))]
     RandomnessError,
     
     /// Invalid public key
-    #[cfg_attr(feature = "std", error("invalid public key"))]
     InvalidPublicKey,
     
     /// Invalid private key
-    #[cfg_attr(feature = "std", error("invalid private key"))]
     InvalidPrivateKey,
     
     /// Invalid ciphertext
-    #[cfg_attr(feature = "std", error("invalid ciphertext"))]
     InvalidCiphertext,
     
     /// Invalid signature
-    #[cfg_attr(feature = "std", error("invalid signature"))]
     InvalidSignature,
     
     /// Context string too long
-    #[cfg_attr(feature = "std", error("context string too long (max 255 bytes)"))]
     ContextTooLong,
     
     /// Input/output error
-    #[cfg_attr(feature = "std", error("I/O error: {0}"))]
     IoError(String),
     
     /// Verification failed
-    #[cfg_attr(feature = "std", error("verification failed"))]
     VerificationFailed,
     
     /// Invalid parameter set
-    #[cfg_attr(feature = "std", error("invalid parameter set"))]
     InvalidParameterSet,
     
     /// Encoding error
-    #[cfg_attr(feature = "std", error("encoding error: {0}"))]
     EncodingError(String),
 }
 
-#[cfg(not(feature = "std"))]
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {

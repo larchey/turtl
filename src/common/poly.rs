@@ -3,15 +3,27 @@
 //! This module implements basic polynomial arithmetic in the ring 
 //! ℤq[X]/(X^256 + 1) used by both ML-KEM and ML-DSA.
 
-use crate::error::{Error, Result};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// A polynomial in the ring ℤq[X]/(X^256 + 1)
-#[derive(Clone, Debug, Zeroize, ZeroizeOnDrop)]
+#[derive(Clone, Debug)]
 pub struct Polynomial {
     /// Coefficients of the polynomial
     pub coeffs: [i32; 256],
 }
+
+// Manual implementation of Zeroize
+impl Zeroize for Polynomial {
+    fn zeroize(&mut self) {
+        // Zeroize all coefficients
+        for coeff in &mut self.coeffs {
+            *coeff = 0;
+        }
+    }
+}
+
+// Manual implementation of ZeroizeOnDrop
+impl ZeroizeOnDrop for Polynomial {}
 
 impl Polynomial {
     /// Create a new zero polynomial

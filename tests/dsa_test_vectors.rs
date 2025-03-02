@@ -3,8 +3,9 @@
 //! This module contains official test vectors for ML-DSA key generation,
 //! signing, and verification as specified in FIPS 204.
 
-use turtl::dsa::{self, ParameterSet, KeyPair, PublicKey, PrivateKey, Signature, SigningMode};
+use turtl::dsa::{self, ParameterSet, KeyPair, PublicKey, SigningMode};
 use turtl::error::Result;
+use turtl::Error;
 use hex;
 
 // Official NIST test vectors for ML-DSA-44
@@ -75,7 +76,7 @@ fn test_ml_dsa_44_deterministic_sign_verify() -> Result<()> {
     let keypair = KeyPair::from_seed(&ML_DSA_44_SEED_1, ParameterSet::ML_DSA_44)?;
     
     // Create public key from test vectors
-    let public_key = PublicKey::new(hex::decode(ML_DSA_44_PUBLIC_KEY_1)?, ParameterSet::ML_DSA_44)?;
+    let public_key = PublicKey::new(hex::decode(ML_DSA_44_PUBLIC_KEY_1).map_err(|e| Error::EncodingError(e.to_string()))?, ParameterSet::ML_DSA_44)?;
     
     // Sign message deterministically
     let context = b"";

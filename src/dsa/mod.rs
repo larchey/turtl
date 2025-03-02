@@ -16,6 +16,9 @@ mod internal;
 pub use params::ParameterSet;
 pub use keypair::KeyPair;
 
+// Import ZeroizeParameterSet
+use params::ZeroizeParameterSet;
+
 /// Signing mode
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SigningMode {
@@ -26,12 +29,25 @@ pub enum SigningMode {
 }
 
 /// ML-DSA public key
-#[derive(Clone, Debug, Zeroize)]
+#[derive(Clone, Debug)]
 pub struct PublicKey {
     /// Raw byte representation of the public key
     bytes: Vec<u8>,
     /// Parameter set associated with this key
     parameter_set: ParameterSet,
+    // Add a ZeroizeParameterSet for zeroizing
+    #[doc(hidden)]
+    _zeroize_param: ZeroizeParameterSet,
+}
+
+// Manual implementation of Zeroize
+impl Zeroize for PublicKey {
+    fn zeroize(&mut self) {
+        self.bytes.zeroize();
+        // parameter_set doesn't need to be zeroized as it's Copy and doesn't contain secrets
+        // But _zeroize_param will be zeroized
+        self._zeroize_param.zeroize();
+    }
 }
 
 impl PublicKey {
@@ -46,6 +62,7 @@ impl PublicKey {
         Ok(Self {
             bytes,
             parameter_set,
+            _zeroize_param: ZeroizeParameterSet(parameter_set),
         })
     }
     
@@ -61,13 +78,29 @@ impl PublicKey {
 }
 
 /// ML-DSA private key
-#[derive(Clone, Debug, Zeroize, ZeroizeOnDrop)]
+#[derive(Clone, Debug)]
 pub struct PrivateKey {
     /// Raw byte representation of the private key
     bytes: Vec<u8>,
     /// Parameter set associated with this key
     parameter_set: ParameterSet,
+    // Add a ZeroizeParameterSet for zeroizing
+    #[doc(hidden)]
+    _zeroize_param: ZeroizeParameterSet,
 }
+
+// Manual implementation of Zeroize
+impl Zeroize for PrivateKey {
+    fn zeroize(&mut self) {
+        self.bytes.zeroize();
+        // parameter_set doesn't need to be zeroized as it's Copy and doesn't contain secrets
+        // But _zeroize_param will be zeroized
+        self._zeroize_param.zeroize();
+    }
+}
+
+// Implement ZeroizeOnDrop manually
+impl ZeroizeOnDrop for PrivateKey {}
 
 impl PrivateKey {
     /// Create a new private key from raw bytes
@@ -81,6 +114,7 @@ impl PrivateKey {
         Ok(Self {
             bytes,
             parameter_set,
+            _zeroize_param: ZeroizeParameterSet(parameter_set),
         })
     }
     
@@ -96,12 +130,25 @@ impl PrivateKey {
 }
 
 /// ML-DSA signature
-#[derive(Clone, Debug, Zeroize)]
+#[derive(Clone, Debug)]
 pub struct Signature {
     /// Raw byte representation of the signature
     bytes: Vec<u8>,
     /// Parameter set associated with this signature
     parameter_set: ParameterSet,
+    // Add a ZeroizeParameterSet for zeroizing
+    #[doc(hidden)]
+    _zeroize_param: ZeroizeParameterSet,
+}
+
+// Manual implementation of Zeroize
+impl Zeroize for Signature {
+    fn zeroize(&mut self) {
+        self.bytes.zeroize();
+        // parameter_set doesn't need to be zeroized as it's Copy and doesn't contain secrets
+        // But _zeroize_param will be zeroized
+        self._zeroize_param.zeroize();
+    }
 }
 
 impl Signature {
@@ -116,6 +163,7 @@ impl Signature {
         Ok(Self {
             bytes,
             parameter_set,
+            _zeroize_param: ZeroizeParameterSet(parameter_set),
         })
     }
     
