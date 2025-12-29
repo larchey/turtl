@@ -1,5 +1,25 @@
 # TURTL Implementation TODO List
 
+## Recent Improvements (Code Audit - December 2025)
+
+### Benchmarks
+- [x] Implement complete ML-KEM benchmarks (key_gen, encapsulate, decapsulate) for all 3 parameter sets
+- [x] Implement complete ML-DSA benchmarks (key_gen, sign, verify) for all 3 parameter sets
+- [x] Add hedged and deterministic signing mode benchmarks
+- [x] Fix RNG/RandomnessError issues in benchmark implementations
+
+### Security Testing
+- [x] Add 11 timing-invariance tests for constant-time operations (marked #[ignore] due to system noise)
+- [x] Add 16 fault injection simulation tests covering bit flips, corruption detection, and bounds checking
+- [x] Add 14 zeroization verification tests for memory safety
+- [x] Test constant-time equality, conditional operations, and swaps across u32/u64/u128/u8
+
+### Test Infrastructure
+- [x] Create comprehensive test documentation with usage instructions
+- [x] Add warmup and statistical analysis for timing tests
+- [x] Test zeroization of arrays, vectors, strings, structs, and nested types
+- [x] Test automatic cleanup in panic scenarios
+
 ## Security Improvements
 - [x] Enhance constant-time operations:
   - [x] Add support for larger integer types (u64, u128)
@@ -40,10 +60,10 @@
   - [ ] Implement optimized reduction for specific moduli
 
 ## Testing Improvements
-- [ ] Add comprehensive security testing:
-  - [ ] Create timing-invariance tests for constant-time operations
-  - [ ] Implement fault injection simulation tests
-  - [ ] Add zeroization verification tests
+- [x] Add comprehensive security testing:
+  - [x] Create timing-invariance tests for constant-time operations (11 tests, #[ignore] by default)
+  - [x] Implement fault injection simulation tests (16 tests covering corruption scenarios)
+  - [x] Add zeroization verification tests (14 tests for memory safety)
   - [ ] Develop side-channel resistance validation tests
 
 - [ ] Expand operation testing:
@@ -59,8 +79,8 @@
 
 - [ ] Add specialized test categories:
   - [ ] Implement fuzzing tests for input validation
-  - [ ] Create memory safety tests
-  - [ ] Add performance benchmarks for security features
+  - [x] Create memory safety tests (14 zeroization tests)
+  - [x] Add performance benchmarks for security features (KEM and DSA benchmarks)
 
 ## Feature Implementation
 - [ ] Complete SIMD optimizations using the nightly feature
