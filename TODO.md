@@ -35,14 +35,23 @@ The bug is in the **NTT (Number-Theoretic Transform) implementation for ML-DSA**
 
 **Required Fix:**
 1. **CRITICAL**: Fix ML-DSA NTT implementation (forward_mldsa/inverse_mldsa in ntt.rs)
-   - Verify Montgomery form conversions are correct
-   - Check zetas table values against FIPS 204 specification
-   - Validate NTT preserves coefficient scale (input [-2,2] → output should stay bounded)
-   - Test NTT(x) then inverse_NTT → should recover original x
+   - ✗ Added Montgomery form conversions (to_montgomery/from_montgomery) - STILL BROKEN
+   - ✗ NTT round-trip test FAILS: input [-2,-1,0,1,2...] → output [6170973, 4136370...] (max error: 7.5M)
+   - **Root issue**: NTT algorithm or zetas table is fundamentally incorrect
+   - **Action needed**: Compare implementation line-by-line with FIPS 204 Section 8.4
+   - **Specific checks needed:**
+     * Verify zetas[] values match primitive 512-th root of unity mod 8380417
+     * Confirm NTT algorithm matches Cooley-Tukey decimation-in-time
+     * Validate Montgomery reduction constants (R, R², qinv)
+     * Test with FIPS 204 Known Answer Test vectors
 
 2. Validate against FIPS 204 Known Answer Tests (KATs)
 3. Re-enable 4 disabled tests in negative_test_cases.rs
 4. Remove debug output from dsa/internal/mod.rs
+
+**Debug Tests Created:**
+- tests/ntt_roundtrip_test.rs: Verifies NTT(x)→inverse(x) recovers original
+- tests/simple_sign_test.rs: Minimal signing test for debugging
 
 **Impact:**
 - ML-DSA signing is currently non-functional

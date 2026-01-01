@@ -331,9 +331,14 @@ impl NTTContext {
     
     /// Forward NTT transform for ML-DSA (q = 8380417)
     fn forward_mldsa(&self, polynomial: &mut Polynomial) -> Result<()> {
+        // Convert to Montgomery form first
+        for i in 0..256 {
+            polynomial.coeffs[i] = self.to_montgomery(polynomial.coeffs[i]);
+        }
+
         let mut len = 128;
         let mut m = 0;
-        
+
         while len >= 1 {
             let mut start = 0;
             while start < 256 {
@@ -342,7 +347,7 @@ impl NTTContext {
                     m = 0; // Reset to first element (now valid)
                 }
                 let zeta = self.zetas[m];
-                
+
                 for j in start..(start + len) {
                     let t = self.montgomery_reduce(
                         zeta as i64 * polynomial.coeffs[j + len] as i64
@@ -351,7 +356,7 @@ impl NTTContext {
                     if polynomial.coeffs[j + len] < 0 {
                         polynomial.coeffs[j + len] += self.modulus;
                     }
-                    
+
                     polynomial.coeffs[j] = polynomial.coeffs[j] + t;
                     if polynomial.coeffs[j] >= self.modulus {
                         polynomial.coeffs[j] -= self.modulus;
@@ -360,13 +365,13 @@ impl NTTContext {
                         polynomial.coeffs[j] += self.modulus;
                     }
                 }
-                
+
                 start += 2 * len;
             }
-            
+
             len >>= 1;
         }
-        
+
         Ok(())
     }
     
@@ -489,7 +494,7 @@ impl NTTContext {
             polynomial.coeffs[i] = self.montgomery_reduce(
                 ninv as i64 * polynomial.coeffs[i] as i64
             );
-            
+
             // Ensure result is in range [0, q-1]
             if polynomial.coeffs[i] < 0 {
                 polynomial.coeffs[i] += self.modulus;
@@ -498,7 +503,16 @@ impl NTTContext {
                 polynomial.coeffs[i] -= self.modulus;
             }
         }
-        
+
+        // Convert from Montgomery form back to normal form
+        for i in 0..256 {
+            polynomial.coeffs[i] = self.from_montgomery(polynomial.coeffs[i]);
+            // Ensure result is in range [0, q-1]
+            if polynomial.coeffs[i] < 0 {
+                polynomial.coeffs[i] += self.modulus;
+            }
+        }
+
         Ok(())
     }
     
