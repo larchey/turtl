@@ -11,26 +11,54 @@ A comprehensive code audit and review of the TURTL post-quantum cryptographic li
 
 ### 🔴 CRITICAL: ML-DSA Signing Implementation Failure
 
-**Status:** Blocks all production use of ML-DSA functionality
+**Status:** ROOT CAUSE IDENTIFIED - NTT Implementation Broken
 
 **Description:**
-The ML-DSA signing algorithm consistently fails after reaching the maximum retry limit (1000 attempts), returning `RandomnessError`. This affects all three parameter sets (ML-DSA-44, ML-DSA-65, ML-DSA-87) and occurs even in deterministic signing mode with seeded keys.
+The ML-DSA signing algorithm consistently fails with 100% z-norm rejections after reaching the maximum retry limit (1000 attempts), returning `RandomnessError`. This affects all three parameter sets (ML-DSA-44, ML-DSA-65, ML-DSA-87) and occurs even in deterministic signing mode with seeded keys.
 
-**Root Cause:**
-- Coefficient clamping issues in NTT operations
-- Systematic failures in norm check validations (lines 197, 227, 263 in `src/dsa/internal/mod.rs`)
-- Warning messages: "Some coefficients were clamped to maximum value"
+**Root Cause (Deep Investigation Completed):**
+
+The bug is in the **NTT (Number-Theoretic Transform) implementation for ML-DSA**:
+
+1. **Forward NTT produces incorrect values:**
+   - Input: s1 with small coefficients `[2, -1, 2, -1, ...]`
+   - After NTT: HUGE values `[6,390,728, 8,238,925, 5,217,711, ...]` (millions!)
+   - Expected: Bounded NTT coefficients proportional to input
+
+2. **Impact on signing:**
+   - c*s1 computation produces huge coefficients (559,739, 3,131,358, ...)
+   - After inverse NTT: Still millions instead of ~78 max (tau*eta = 39*2)
+   - Centered infinity norm: **~4.1M vs threshold 131K** (32x too large!)
+   - z = y + c*s1 systematically fails norm check on EVERY iteration (100% rejection rate)
+
+3. **NTT Round-trip test FAILS:**
+   - Input: `[-2, -1, 0, 1, 2, -2, -1, 0, 1, 2]`
+   - After NTT→inverse: `[6,170,973, 4,136,370, 0, 6,025,023, ...]`
+   - **Max error: 7.5 million** - NTT is completely broken
+
+**Attempted Fixes:**
+- ✓ Added negative coefficient handling in forward_mldsa (ntt.rs:359-361)
+- ✓ Created infinity_norm_centered() for proper modular norm checks
+- ✓ Fixed centered arithmetic for z computation
+- ✗ Added Montgomery form conversions (to_montgomery/from_montgomery) - STILL BROKEN
+
+**Root Issue:**
+The NTT algorithm implementation or zetas table values are fundamentally incorrect.
 
 **Impact:**
 - ML-DSA signing is completely non-functional
 - 4 negative test cases disabled
-- DSA benchmarks reliability questionable
+- DSA benchmarks produce invalid signatures
 - Cannot validate FIPS 204 compliance
 
 **Required Actions:**
-1. **IMMEDIATE:** Investigate coefficient clamping in NTT operations
-2. Debug and fix norm check failures in signing retry loop
-3. Validate corrected implementation against official FIPS 204 test vectors
+1. **IMMEDIATE:** Fix NTT implementation (forward_mldsa/inverse_mldsa in ntt.rs)
+   - Compare line-by-line with FIPS 204 Section 8.4 NTT specification
+   - Verify zetas[] values match primitive 512-th root of unity mod 8380417
+   - Validate Montgomery reduction constants (R=2³², R², qinv)
+   - Confirm Cooley-Tukey decimation-in-time algorithm correctness
+2. Test with FIPS 204 Known Answer Test vectors
+3. Verify NTT round-trip test passes: `tests/ntt_roundtrip_test.rs`
 4. Re-enable disabled tests in `tests/negative_test_cases.rs`
 5. Re-run all DSA benchmarks to verify performance
 
@@ -44,7 +72,7 @@ The ML-DSA signing algorithm consistently fails after reaching the maximum retry
 
 ## Work Completed
 
-### ✅ Comprehensive Test Suite Added (6 Commits)
+### ✅ Comprehensive Test Suite Added (8 Commits + Deep Investigation)
 
 #### 1. ML-KEM Benchmarks
 - **File:** `benches/kem_benchmark.rs`
@@ -82,6 +110,17 @@ The ML-DSA signing algorithm consistently fails after reaching the maximum retry
 - **Tests:** 17 tests for error handling and input validation
 - **Coverage:** Invalid sizes, corrupted data, mismatched parameters, empty inputs, off-by-one errors
 - **Status:** ✅ 13 passing, 4 disabled (blocked by ML-DSA bug)
+
+#### 7. NTT Investigation & Diagnostic Tests
+- **Files:** `tests/ntt_roundtrip_test.rs`, `tests/simple_sign_test.rs`
+- **Investigation:** Deep root cause analysis of ML-DSA signing failure
+- **Findings:**
+  - NTT round-trip test created and confirmed broken (max error 7.5M)
+  - Traced coefficient values through entire signing flow
+  - Identified NTT as root cause (not signing algorithm itself)
+  - Attempted Montgomery form fix (unsuccessful)
+- **Status:** ✅ Root cause identified, diagnostic tests created
+- **Commits:** 2 (partial fixes + investigation documentation)
 
 ### 📊 Test Statistics
 
@@ -207,14 +246,25 @@ The ML-DSA signing algorithm consistently fails after reaching the maximum retry
 
 ## Files Modified During Audit
 
-1. `benches/kem_benchmark.rs` - Created
-2. `benches/dsa_benchmark.rs` - Created
-3. `tests/timing_invariance_test.rs` - Created
-4. `tests/fault_injection_test.rs` - Created
-5. `tests/zeroization_test.rs` - Created
-6. `tests/negative_test_cases.rs` - Created
-7. `TODO.md` - Updated with findings and critical bug section
-8. `AUDIT_SUMMARY.md` - This document
+### Test Files Created
+1. `benches/kem_benchmark.rs` - ML-KEM performance benchmarks
+2. `benches/dsa_benchmark.rs` - ML-DSA performance benchmarks
+3. `tests/timing_invariance_test.rs` - Constant-time operation tests
+4. `tests/fault_injection_test.rs` - Fault detection tests
+5. `tests/zeroization_test.rs` - Memory safety tests
+6. `tests/negative_test_cases.rs` - Error handling tests
+7. `tests/ntt_roundtrip_test.rs` - NTT correctness diagnostic
+8. `tests/simple_sign_test.rs` - Minimal signing test for debugging
+
+### Source Files Modified
+9. `src/common/ntt.rs` - Added Montgomery form conversions, fixed negative coefficient handling
+10. `src/common/poly.rs` - Added infinity_norm_centered() method
+11. `src/dsa/internal/mod.rs` - Fixed centered arithmetic, added debug output
+
+### Documentation
+12. `TODO.md` - Updated with deep root cause analysis and detailed fix requirements
+13. `AUDIT_SUMMARY.md` - This comprehensive audit report
+14. `Cargo.toml` - Added benchmark configurations
 
 ---
 
@@ -239,7 +289,13 @@ The TURTL library has a solid foundation with good architecture, comprehensive t
 
 ---
 
-**Audit Date:** December 29, 2025
-**Total Test Coverage:** 105 tests
-**Critical Bugs Found:** 1 (ML-DSA signing)
-**Commits Made:** 6 (benchmarks, security tests, negative tests, documentation)
+**Audit Date:** December 29-30, 2025
+**Total Test Coverage:** 107+ tests (including diagnostic tests)
+**Critical Bugs Found:** 1 (ML-DSA NTT implementation)
+**Root Cause:** Identified - NTT algorithm/zetas incorrect
+**Commits Made:** 9 total
+- 6 commits: Test suite (benchmarks, security tests, negative tests)
+- 2 commits: NTT investigation (partial fixes, diagnostics)
+- 1 commit: Build configuration
+**Files Modified:** 14 files (8 test files created, 3 source files modified, 3 documentation files updated)
+**Investigation Depth:** Complete coefficient-level trace through NTT → signing → norm checks
