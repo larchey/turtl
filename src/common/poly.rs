@@ -72,10 +72,31 @@ impl Polynomial {
     }
 
     /// Compute the infinity norm of this polynomial
+    /// For ML-DSA, this uses centered representation to compute the norm
     pub fn infinity_norm(&self) -> i32 {
         let mut max = 0;
         for &coeff in &self.coeffs {
             let abs = coeff.abs();
+            if abs > max {
+                max = abs;
+            }
+        }
+        max
+    }
+
+    /// Compute the infinity norm using centered representation modulo q
+    /// This is needed for ML-DSA norm checks
+    pub fn infinity_norm_centered(&self, modulus: i32) -> i32 {
+        let half_q = modulus / 2;
+        let mut max = 0;
+        for &coeff in &self.coeffs {
+            // Convert to centered representation [-q/2, q/2]
+            let centered = if coeff > half_q {
+                coeff - modulus
+            } else {
+                coeff
+            };
+            let abs = centered.abs();
             if abs > max {
                 max = abs;
             }

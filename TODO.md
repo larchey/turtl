@@ -5,23 +5,49 @@
 ### ML-DSA Signing Implementation Failure
 **SEVERITY: CRITICAL - BLOCKING PRODUCTION USE**
 
+**STATUS: ROOT CAUSE IDENTIFIED - IN PROGRESS**
+
 The ML-DSA signing implementation has a critical bug that prevents signature generation:
-- Signing algorithm consistently hits maximum retry limit (1000 attempts)
+- Signing algorithm consistently hits maximum retry limit (100% z-norm rejections)
 - Fails with `RandomnessError` even in deterministic mode with seeded keys
-- Root cause: Coefficient clamping issues causing systematic norm check failures
 - Affects all parameter sets (ML-DSA-44, ML-DSA-65, ML-DSA-87)
-- Warning messages: "Some coefficients were clamped to maximum value"
+
+**Root Cause Analysis (Deep Investigation Completed):**
+
+The bug is in the **NTT (Number-Theoretic Transform) implementation for ML-DSA**:
+
+1. **Forward NTT produces incorrect values:**
+   - Input: s1 with small coefficients [2, -1, 2, -1, ...]
+   - Output: HUGE values after NTT [6390728, 8238925, 5217711, ...]
+   - Expected: NTT should preserve coefficient magnitude scale
+
+2. **Impact on signing:**
+   - c*s1 computation in NTT domain produces huge coefficients (559739, 3131358, ...)
+   - After inverse NTT and centering: still millions instead of ~78 max (tau*eta)
+   - Centered infinity norm ~4,165,777 vs threshold 130,994 (32x too large!)
+   - z = y + c*s1 systematically fails norm check on EVERY iteration
+
+3. **Partial fixes applied:**
+   - ✓ Added negative coefficient handling in forward_mldsa (line 359-361 ntt.rs)
+   - ✓ Created infinity_norm_centered() for proper modular norm calculation
+   - ✓ Fixed centered arithmetic for z computation
+   - ✗ NTT/inverse-NTT chain still produces incorrect magnitudes
+
+**Required Fix:**
+1. **CRITICAL**: Fix ML-DSA NTT implementation (forward_mldsa/inverse_mldsa in ntt.rs)
+   - Verify Montgomery form conversions are correct
+   - Check zetas table values against FIPS 204 specification
+   - Validate NTT preserves coefficient scale (input [-2,2] → output should stay bounded)
+   - Test NTT(x) then inverse_NTT → should recover original x
+
+2. Validate against FIPS 204 Known Answer Tests (KATs)
+3. Re-enable 4 disabled tests in negative_test_cases.rs
+4. Remove debug output from dsa/internal/mod.rs
 
 **Impact:**
 - ML-DSA signing is currently non-functional
-- 4 negative tests disabled due to this bug
-- DSA benchmarks may have also been affected (needs investigation)
-
-**Required Fix:**
-1. Investigate coefficient clamping in NTT operations
-2. Fix norm check failures in signing loop (lines 197, 227, 263 in dsa/internal/mod.rs)
-3. Validate against FIPS 204 test vectors
-4. Re-enable disabled tests in negative_test_cases.rs
+- 4 negative tests disabled
+- All DSA operations requiring signing are blocked
 
 ## Recent Improvements (Code Audit - December 2025)
 

@@ -356,6 +356,9 @@ impl NTTContext {
                     if polynomial.coeffs[j] >= self.modulus {
                         polynomial.coeffs[j] -= self.modulus;
                     }
+                    if polynomial.coeffs[j] < 0 {
+                        polynomial.coeffs[j] += self.modulus;
+                    }
                 }
                 
                 start += 2 * len;

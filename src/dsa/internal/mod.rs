@@ -118,10 +118,15 @@ pub(crate) fn ml_dsa_sign_internal(
     let mut s1_hat = Vec::with_capacity(l);
     let mut s2_hat = Vec::with_capacity(k);
     let mut t0_hat = Vec::with_capacity(k);
-    
+
+    eprintln!("DEBUG: s1[0] before NTT (first 10): {:?}", &s1[0].coeffs[0..10]);
+
     for i in 0..l {
         let mut s1_i = s1[i].clone();
         ntt_ctx.forward(&mut s1_i)?;
+        if i == 0 {
+            eprintln!("DEBUG: s1[0] after NTT (first 10): {:?}", &s1_i.coeffs[0..10]);
+        }
         s1_hat.push(s1_i);
     }
     
@@ -147,60 +152,113 @@ pub(crate) fn ml_dsa_sign_internal(
     
     // Initialize counter
     let mut kappa = 0u16;
-    
+
     // Set a maximum number of attempts to prevent infinite loops
     const MAX_ATTEMPTS: u16 = 1000;
-    
+
+    // Debug counters
+    let mut z_rejections = 0;
+    let mut r0_rejections = 0;
+    let mut hint_rejections = 0;
+
     // Loop until a valid signature is found or max attempts reached
     while kappa < MAX_ATTEMPTS {
-        // Generate y
+        // Generate y (in centered representation [-gamma1+1, gamma1-1])
         let y = expand_mask(&rho_prime, kappa, l, gamma1)?;
-        
-        // Compute w = Ay
-        let w = compute_w(&matrix_a, &y, &ntt_ctx)?;
-        
+
+        // For w = Ay, we need y in [0, q-1] representation for NTT
+        let mut y_reduced = y.clone();
+        for i in 0..l {
+            y_reduced[i].reduce_modulo(ntt_ctx.modulus);
+        }
+
+        // Compute w = Ay using reduced y
+        let w = compute_w(&matrix_a, &y_reduced, &ntt_ctx)?;
+
         // Decompose w and compute w1
         let mut w1 = Vec::with_capacity(k);
         let mut w0 = Vec::with_capacity(k);
-        
+
         for i in 0..k {
             let (w1_i, w0_i) = decompose(&w[i], gamma2)?;
             w1.push(w1_i);
             w0.push(w0_i);
         }
-        
+
         // Compute c = H(mu || w1)
         let w1_encoded = encode_w1(&w1)?;
         let mut c_data = Vec::new();
         c_data.extend_from_slice(&mu);
         c_data.extend_from_slice(&w1_encoded);
         let c_tilde = hash::h_function(&c_data, parameter_set.lambda() / 4);
-        
+
         // Sample c from challenge space
         let c = sample_in_ball(&c_tilde, tau)?;
-        
+
+        if kappa == 0 {
+            eprintln!("  c before NTT (first 20): {:?}", &c.coeffs[0..20]);
+            eprintln!("  c hamming weight: {}", c.hamming_weight());
+        }
+
         // Convert c to NTT domain
         let mut c_hat = c.clone();
         ntt_ctx.forward(&mut c_hat)?;
-        
-        // Compute z = y + c*s1
-        let mut z = y.clone();
+
+        if kappa == 0 {
+            eprintln!("  c after NTT (first 10): {:?}", &c_hat.coeffs[0..10]);
+        }
+
+        // Compute z = y + c*s1 using centered arithmetic
+        let mut z = Vec::with_capacity(l);
         for i in 0..l {
+            // Compute c*s1 in NTT domain
             let mut cs1_i = ntt_ctx.multiply_ntt(&c_hat, &s1_hat[i])?;
             ntt_ctx.inverse(&mut cs1_i)?;
-            z[i].add_assign(&cs1_i, ntt_ctx.modulus);
+
+            if kappa == 0 && i == 0 {
+                eprintln!("  cs1[0] before centering (first 10): {:?}", &cs1_i.coeffs[0..10]);
+                eprintln!("  y[0] (first 10): {:?}", &y[0].coeffs[0..10]);
+            }
+
+            // Convert to centered representation
+            cs1_i.to_centered_representation(ntt_ctx.modulus);
+
+            if kappa == 0 && i == 0 {
+                eprintln!("  cs1[0] after centering (first 10): {:?}", &cs1_i.coeffs[0..10]);
+            }
+
+            // Add y (already centered) + cs1 (now centered) using regular addition
+            let mut z_i = Polynomial::new();
+            for j in 0..256 {
+                z_i.coeffs[j] = y[i].coeffs[j] + cs1_i.coeffs[j];
+            }
+            // Reduce to [0, q-1] for subsequent operations
+            z_i.reduce_modulo(ntt_ctx.modulus);
+            z.push(z_i);
         }
-        
-        // Check if z is small enough
+
+        // Check if z is small enough (using centered norm)
         let mut z_ok = true;
+        let mut max_z_norm = 0;
         for i in 0..l {
-            if z[i].infinity_norm() >= (gamma1 - beta) as i32 {
+            let norm = z[i].infinity_norm_centered(ntt_ctx.modulus);
+            if norm > max_z_norm {
+                max_z_norm = norm;
+            }
+            if norm >= (gamma1 - beta) as i32 {
                 z_ok = false;
                 break;
             }
         }
-        
+
         if !z_ok {
+            z_rejections += 1;
+            if kappa == 0 {
+                eprintln!("First z rejection: max_norm = {}, threshold = {}", max_z_norm, gamma1 - beta);
+                eprintln!("  Sample z[0] coeffs (first 10): {:?}", &z[0].coeffs[0..10]);
+                eprintln!("  gamma1 = {}, beta = {}", gamma1, beta);
+                eprintln!("  modulus = {}, half_q = {}", ntt_ctx.modulus, ntt_ctx.modulus / 2);
+            }
             kappa += 1;
             continue;
         }
@@ -208,29 +266,30 @@ pub(crate) fn ml_dsa_sign_internal(
         // Compute r0 = LowBits(w - c*s2, gamma2)
         let mut r0 = Vec::with_capacity(k);
         let mut cs2 = Vec::with_capacity(k);
-        
+
         for i in 0..k {
             let mut cs2_i = ntt_ctx.multiply_ntt(&c_hat, &s2_hat[i])?;
             ntt_ctx.inverse(&mut cs2_i)?;
             cs2.push(cs2_i.clone());
-            
+
             let mut w_prime = w[i].clone();
             w_prime.sub_assign(&cs2_i, ntt_ctx.modulus);
-            
+
             let (_, r0_i) = decompose(&w_prime, gamma2)?;
             r0.push(r0_i);
         }
-        
-        // Check if r0 is small enough
+
+        // Check if r0 is small enough (using centered norm)
         let mut r0_ok = true;
         for i in 0..k {
-            if r0[i].infinity_norm() >= (gamma2 - beta) as i32 {
+            if r0[i].infinity_norm_centered(ntt_ctx.modulus) >= (gamma2 - beta) as i32 {
                 r0_ok = false;
                 break;
             }
         }
         
         if !r0_ok {
+            r0_rejections += 1;
             kappa += 1;
             continue;
         }
@@ -242,16 +301,16 @@ pub(crate) fn ml_dsa_sign_internal(
             ntt_ctx.inverse(&mut ct0_i)?;
             ct0.push(ct0_i);
         }
-        
+
         // Create hints
         let mut h = Vec::with_capacity(k);
         for i in 0..k {
             let mut w_prime = w[i].clone();
             w_prime.sub_assign(&cs2[i], ntt_ctx.modulus);
-            
+
             // Add ct0 to w'
             w_prime.add_assign(&ct0[i], ntt_ctx.modulus);
-            
+
             let h_i = make_hint(&w_prime, &ct0[i], gamma2)?;
             h.push(h_i);
         }
@@ -261,15 +320,26 @@ pub(crate) fn ml_dsa_sign_internal(
         
         // Check if number of 1's is within limit
         if ones_count > omega {
+            hint_rejections += 1;
             kappa += 1;
             continue;
         }
-        
+
+        // Convert z to centered representation for encoding
+        let mut z_centered = z.clone();
+        for i in 0..l {
+            z_centered[i].to_centered_representation(ntt_ctx.modulus);
+        }
+
         // Encode the signature
-        return encode_signature(&c_tilde, &z, &h, parameter_set);
+        return encode_signature(&c_tilde, &z_centered, &h, parameter_set);
     }
     
     // If we've reached the maximum number of attempts, return an error
+    eprintln!("Signing failed after {} attempts:", MAX_ATTEMPTS);
+    eprintln!("  z rejections: {}", z_rejections);
+    eprintln!("  r0 rejections: {}", r0_rejections);
+    eprintln!("  hint rejections: {}", hint_rejections);
     Err(Error::RandomnessError)
 }
 
@@ -836,10 +906,10 @@ fn compute_w(
         
         // Inverse NTT
         ntt_ctx.inverse(&mut w_i)?;
-        
+
         w.push(w_i);
     }
-    
+
     Ok(w)
 }
 
