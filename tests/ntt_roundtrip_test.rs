@@ -25,19 +25,26 @@ fn test_mldsa_ntt_roundtrip() {
 
     println!("After inverse (first 10): {:?}", &recovered.coeffs[0..10]);
 
-    // Check if we recovered the original
+    // Check if we recovered the original (comparing modular equivalents)
+    let ntt_ctx = NTTContext::new(NTTType::MLDSA);
+    let modulus = ntt_ctx.modulus;
+
     let mut matches = true;
     let mut max_error = 0;
     for i in 0..256 {
-        let error = (original.coeffs[i] - recovered.coeffs[i]).abs();
+        // Normalize both to [0, q-1] for comparison
+        let orig_normalized = original.coeffs[i].rem_euclid(modulus);
+        let recovered_normalized = recovered.coeffs[i].rem_euclid(modulus);
+
+        let error = (orig_normalized - recovered_normalized).abs();
         if error > max_error {
             max_error = error;
         }
         if error > 0 {
             matches = false;
             if i < 10 {
-                println!("Mismatch at {}: original={}, recovered={}",
-                    i, original.coeffs[i], recovered.coeffs[i]);
+                println!("Mismatch at {}: original={} (normalized={}), recovered={}",
+                    i, original.coeffs[i], orig_normalized, recovered_normalized);
             }
         }
     }

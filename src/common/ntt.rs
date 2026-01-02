@@ -330,43 +330,32 @@ impl NTTContext {
     }
     
     /// Forward NTT transform for ML-DSA (q = 8380417)
+    /// Uses Cooley-Tukey butterfly operations
     fn forward_mldsa(&self, polynomial: &mut Polynomial) -> Result<()> {
-        // Convert to Montgomery form first
+        // Ensure all coefficients are in [0, q-1]
         for i in 0..256 {
-            polynomial.coeffs[i] = self.to_montgomery(polynomial.coeffs[i]);
+            polynomial.coeffs[i] = polynomial.coeffs[i].rem_euclid(self.modulus);
         }
 
+        let mut k = 1; // Start from zetas[1], zetas[0] = 1 is not used
         let mut len = 128;
-        let mut m = 0;
 
         while len >= 1 {
-            let mut start = 0;
-            while start < 256 {
-                m += 1;
-                if m >= self.zetas.len() {
-                    m = 0; // Reset to first element (now valid)
-                }
-                let zeta = self.zetas[m];
+            for start in (0..256).step_by(2 * len) {
+                let zeta = self.zetas[k];
+                k += 1;
 
                 for j in start..(start + len) {
-                    let t = self.montgomery_reduce(
-                        zeta as i64 * polynomial.coeffs[j + len] as i64
-                    );
+                    // Use direct modulo for now (like ML-KEM) to diagnose the issue
+                    let t = ((zeta as i64 * polynomial.coeffs[j + len] as i64)
+                            % self.modulus as i64) as i32;
+
                     polynomial.coeffs[j + len] = polynomial.coeffs[j] - t;
-                    if polynomial.coeffs[j + len] < 0 {
-                        polynomial.coeffs[j + len] += self.modulus;
-                    }
+                    polynomial.coeffs[j + len] = polynomial.coeffs[j + len].rem_euclid(self.modulus);
 
                     polynomial.coeffs[j] = polynomial.coeffs[j] + t;
-                    if polynomial.coeffs[j] >= self.modulus {
-                        polynomial.coeffs[j] -= self.modulus;
-                    }
-                    if polynomial.coeffs[j] < 0 {
-                        polynomial.coeffs[j] += self.modulus;
-                    }
+                    polynomial.coeffs[j] = polynomial.coeffs[j].rem_euclid(self.modulus);
                 }
-
-                start += 2 * len;
             }
 
             len >>= 1;
@@ -448,69 +437,45 @@ impl NTTContext {
         Ok(())
     }
     
-    /// Inverse NTT transform for ML-DSA
+    /// Inverse NTT transform for ML-DSA (q = 8380417)
+    /// Uses Gentleman-Sande butterfly operations (inverse of Cooley-Tukey)
     fn inverse_mldsa(&self, polynomial: &mut Polynomial) -> Result<()> {
+        // Start from the end of zetas used in forward transform
+        // Forward uses k=1..256 (255 zetas: 1+2+4+8+16+32+64+128)
+        // Inverse uses them in reverse: 255..1
+        let mut k = 255;
         let mut len = 1;
-        let mut m = self.zetas.len();
-        
+
         while len < 256 {
-            let mut start = 0;
-            while start < 256 {
-                if m <= 1 {
-                    // If we've used all zetas, reset to the end
-                    m = self.zetas.len();
-                }
-                m -= 1;
-                
-                let zeta_inv = self.modulus - self.zetas[m];
-                
+            for start in (0..256).step_by(2 * len) {
+                // Use negative of zeta for inverse (or equivalently, modulus - zeta)
+                let zeta_inv = self.modulus - self.zetas[k];
+                k -= 1;
+
                 for j in start..(start + len) {
                     let t = polynomial.coeffs[j];
-                    
+
                     polynomial.coeffs[j] = t + polynomial.coeffs[j + len];
-                    if polynomial.coeffs[j] >= self.modulus {
-                        polynomial.coeffs[j] -= self.modulus;
-                    }
-                    
+                    polynomial.coeffs[j] = polynomial.coeffs[j].rem_euclid(self.modulus);
+
                     polynomial.coeffs[j + len] = t - polynomial.coeffs[j + len];
-                    if polynomial.coeffs[j + len] < 0 {
-                        polynomial.coeffs[j + len] += self.modulus;
-                    }
-                    
-                    polynomial.coeffs[j + len] = self.montgomery_reduce(
-                        zeta_inv as i64 * polynomial.coeffs[j + len] as i64
-                    );
+                    polynomial.coeffs[j + len] = polynomial.coeffs[j + len].rem_euclid(self.modulus);
+
+                    // Use direct modulo for now (like ML-KEM) to diagnose the issue
+                    polynomial.coeffs[j + len] = ((zeta_inv as i64 * polynomial.coeffs[j + len] as i64)
+                                                  % self.modulus as i64) as i32;
                 }
-                
-                start += 2 * len;
             }
-            
-            len *= 2;
-        }
-        
-        // Multiply by n^(-1) mod q
-        let ninv = 8347681; // 256^(-1) mod 8380417 for ML-DSA
-        for i in 0..256 {
-            polynomial.coeffs[i] = self.montgomery_reduce(
-                ninv as i64 * polynomial.coeffs[i] as i64
-            );
 
-            // Ensure result is in range [0, q-1]
-            if polynomial.coeffs[i] < 0 {
-                polynomial.coeffs[i] += self.modulus;
-            }
-            if polynomial.coeffs[i] >= self.modulus {
-                polynomial.coeffs[i] -= self.modulus;
-            }
+            len <<= 1;
         }
 
-        // Convert from Montgomery form back to normal form
+        // Multiply by n^(-1) mod q = 8347681 (256^(-1) mod 8380417 for ML-DSA)
+        let ninv = 8347681;
         for i in 0..256 {
-            polynomial.coeffs[i] = self.from_montgomery(polynomial.coeffs[i]);
-            // Ensure result is in range [0, q-1]
-            if polynomial.coeffs[i] < 0 {
-                polynomial.coeffs[i] += self.modulus;
-            }
+            // Use direct modulo for now (like ML-KEM) to diagnose the issue
+            polynomial.coeffs[i] = ((ninv as i64 * polynomial.coeffs[i] as i64)
+                                    % self.modulus as i64) as i32;
         }
 
         Ok(())
@@ -540,20 +505,9 @@ impl NTTContext {
                     };
                 },
                 NTTType::MLDSA => {
-                    // For ML-DSA, use Montgomery multiplication
-                    // Multiply and reduce
-                    let mut prod = self.montgomery_reduce(
-                        a.coeffs[i] as i64 * b.coeffs[i] as i64
-                    );
-                    
-                    // Ensure the result is in the range [0, q-1]
-                    if prod < 0 {
-                        prod += self.modulus;
-                    }
-                    if prod >= self.modulus {
-                        prod -= self.modulus;
-                    }
-                    
+                    // Use direct modulo (matching forward/inverse implementation)
+                    let prod = ((a.coeffs[i] as i64 * b.coeffs[i] as i64)
+                               % self.modulus as i64) as i32;
                     result.coeffs[i] = prod;
                 }
             }
