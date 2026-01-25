@@ -1115,7 +1115,7 @@ fn encode_w1(w1: &[Polynomial]) -> Result<Vec<u8>> {
 
     for w1_item in w1.iter().take(k) {
         // Convert polynomial coefficients to bits
-        let mut bits = Vec::with_capacity(256 * bits_per_coeff);
+        let mut bits = Vec::with_capacity(256_usize * bits_per_coeff);
 
         for j in 0..256 {
             // Get the coefficient as a non-negative value
