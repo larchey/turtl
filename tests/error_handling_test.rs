@@ -1,10 +1,10 @@
 //! Tests for error handling in the TURTL library.
-//! 
+//!
 //! This module tests the robustness of the error handling mechanisms
 //! by purposely introducing invalid inputs and boundary conditions.
 
-use turtl::kem::{PublicKey, PrivateKey, Ciphertext, ParameterSet};
 use turtl::error::Error;
+use turtl::kem::{Ciphertext, ParameterSet, PrivateKey, PublicKey};
 use turtl::security::fault_detection;
 
 #[test]
@@ -50,10 +50,19 @@ fn test_fault_detection_constant_time_eq() {
     let b = vec![1, 2, 3, 4];
     let c = vec![1, 2, 3, 5];
     let d = vec![1, 2, 3];
-    
-    assert!(fault_detection::ct_eq(&a, &b), "Equal arrays should return true");
-    assert!(!fault_detection::ct_eq(&a, &c), "Unequal arrays should return false");
-    assert!(!fault_detection::ct_eq(&a, &d), "Different length arrays should return false");
+
+    assert!(
+        fault_detection::ct_eq(&a, &b),
+        "Equal arrays should return true"
+    );
+    assert!(
+        !fault_detection::ct_eq(&a, &c),
+        "Unequal arrays should return false"
+    );
+    assert!(
+        !fault_detection::ct_eq(&a, &d),
+        "Different length arrays should return false"
+    );
 }
 
 #[test]
@@ -61,14 +70,14 @@ fn test_bounds_checking() {
     // Test the bounds checking function
     let result = fault_detection::verify_bounds(10, 1, 100);
     assert!(result.is_ok(), "Value within bounds should pass");
-    
+
     let result = fault_detection::verify_bounds(0, 1, 100);
     assert!(result.is_err(), "Value below bounds should fail");
     match result {
         Err(Error::FaultDetected) => (),
         _ => panic!("Expected FaultDetected error"),
     }
-    
+
     let result = fault_detection::verify_bounds(101, 1, 100);
     assert!(result.is_err(), "Value above bounds should fail");
     match result {

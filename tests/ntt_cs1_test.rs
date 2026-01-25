@@ -57,6 +57,9 @@ fn test_cs1_magnitude() {
 
     // Should be around tau * max(s1) = 39 * 2 = 78
     // Allow some leeway due to circular convolution, but should be < 200
-    assert!(max_centered < 200,
-           "cs1 coefficients too large: max={}, expected ~78", max_centered);
+    assert!(
+        max_centered < 200,
+        "cs1 coefficients too large: max={}, expected ~78",
+        max_centered
+    );
 }
