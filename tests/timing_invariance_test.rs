@@ -32,9 +32,7 @@
 
 use std::time::Instant;
 use turtl::security::constant_time::{
-    ct_cmov, ct_cmov_byte, ct_cmov_u128, ct_cmov_u64, ct_cswap, ct_cswap_slice, ct_cswap_u128,
-    ct_cswap_u64, ct_eq_u128, ct_eq_u32, ct_eq_u64, ct_is_zero_u128, ct_is_zero_u32,
-    ct_is_zero_u64, ct_is_zero_u8, ct_select, ct_select_byte, ct_select_u128, ct_select_u64,
+    ct_cmov, ct_cmov_u128, ct_cmov_u64, ct_cswap, ct_cswap_slice, ct_eq_u32, ct_is_zero_u32, ct_is_zero_u8, ct_select, ct_select_u64,
 };
 
 const ITERATIONS: usize = 10000;

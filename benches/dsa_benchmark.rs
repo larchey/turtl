@@ -38,7 +38,7 @@ fn bench_dsa87_keygen(c: &mut Criterion) {
 
 /// Benchmark ML-DSA-44 signing (hedged mode)
 fn bench_dsa44_sign_hedged(c: &mut Criterion) {
-    let (public_key, private_key) = dsa::key_gen(ParameterSet::MlDsa44).unwrap();
+    let (_public_key, private_key) = dsa::key_gen(ParameterSet::MlDsa44).unwrap();
     let message = b"Benchmark message for ML-DSA signing performance testing";
     let context = b"";
 
@@ -58,7 +58,7 @@ fn bench_dsa44_sign_hedged(c: &mut Criterion) {
 
 /// Benchmark ML-DSA-65 signing (hedged mode)
 fn bench_dsa65_sign_hedged(c: &mut Criterion) {
-    let (public_key, private_key) = dsa::key_gen(ParameterSet::MlDsa65).unwrap();
+    let (_public_key, private_key) = dsa::key_gen(ParameterSet::MlDsa65).unwrap();
     let message = b"Benchmark message for ML-DSA signing performance testing";
     let context = b"";
 
@@ -78,7 +78,7 @@ fn bench_dsa65_sign_hedged(c: &mut Criterion) {
 
 /// Benchmark ML-DSA-87 signing (hedged mode)
 fn bench_dsa87_sign_hedged(c: &mut Criterion) {
-    let (public_key, private_key) = dsa::key_gen(ParameterSet::MlDsa87).unwrap();
+    let (_public_key, private_key) = dsa::key_gen(ParameterSet::MlDsa87).unwrap();
     let message = b"Benchmark message for ML-DSA signing performance testing";
     let context = b"";
 
@@ -98,7 +98,7 @@ fn bench_dsa87_sign_hedged(c: &mut Criterion) {
 
 /// Benchmark ML-DSA-44 signing (deterministic mode)
 fn bench_dsa44_sign_deterministic(c: &mut Criterion) {
-    let (public_key, private_key) = dsa::key_gen(ParameterSet::MlDsa44).unwrap();
+    let (_public_key, private_key) = dsa::key_gen(ParameterSet::MlDsa44).unwrap();
     let message = b"Benchmark message for ML-DSA signing performance testing";
     let context = b"";
 
@@ -118,7 +118,7 @@ fn bench_dsa44_sign_deterministic(c: &mut Criterion) {
 
 /// Benchmark ML-DSA-65 signing (deterministic mode)
 fn bench_dsa65_sign_deterministic(c: &mut Criterion) {
-    let (public_key, private_key) = dsa::key_gen(ParameterSet::MlDsa65).unwrap();
+    let (_public_key, private_key) = dsa::key_gen(ParameterSet::MlDsa65).unwrap();
     let message = b"Benchmark message for ML-DSA signing performance testing";
     let context = b"";
 
@@ -138,7 +138,7 @@ fn bench_dsa65_sign_deterministic(c: &mut Criterion) {
 
 /// Benchmark ML-DSA-87 signing (deterministic mode)
 fn bench_dsa87_sign_deterministic(c: &mut Criterion) {
-    let (public_key, private_key) = dsa::key_gen(ParameterSet::MlDsa87).unwrap();
+    let (_public_key, private_key) = dsa::key_gen(ParameterSet::MlDsa87).unwrap();
     let message = b"Benchmark message for ML-DSA signing performance testing";
     let context = b"";
 

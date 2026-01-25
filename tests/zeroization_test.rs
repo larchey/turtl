@@ -83,7 +83,7 @@ fn test_zeroize_on_drop() {
 
     let secret = Secret { data: [0x42u8; 32] };
 
-    let ptr = secret.data.as_ptr();
+    let _ptr = secret.data.as_ptr();
 
     // Verify initial value
     assert_eq!(secret.data[0], 0x42);
@@ -123,7 +123,7 @@ fn test_string_zeroization() {
 /// Test zeroization of custom struct with multiple fields
 #[test]
 fn test_struct_zeroization() {
-    use zeroize::{Zeroize, ZeroizeOnDrop};
+    use zeroize::Zeroize;
 
     #[derive(Zeroize)]
     #[zeroize(drop)]
@@ -260,7 +260,7 @@ fn test_partial_zeroization() {
 /// Test zeroization of nested structures
 #[test]
 fn test_nested_structure_zeroization() {
-    use zeroize::{Zeroize, ZeroizeOnDrop};
+    use zeroize::Zeroize;
 
     #[derive(Zeroize)]
     #[zeroize(drop)]
@@ -326,8 +326,8 @@ fn test_zeroization_isolation() {
     use zeroize::Zeroize;
 
     let mut secret1 = [0x42u8; 32];
-    let mut secret2 = [0x43u8; 32];
-    let mut public_data = [0x44u8; 32];
+    let secret2 = [0x43u8; 32];
+    let public_data = [0x44u8; 32];
 
     // Zeroize only secret1
     secret1.zeroize();

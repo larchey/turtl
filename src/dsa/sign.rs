@@ -4,6 +4,8 @@
 
 use super::internal::{ml_dsa_hash_sign_internal, ml_dsa_sign_internal};
 use super::{HashFunction, PrivateKey, Signature, SigningMode};
+#[cfg(test)]
+use super::ParameterSet;
 use crate::error::{Error, Result};
 use rand::{rngs::OsRng, RngCore};
 

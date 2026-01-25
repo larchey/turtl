@@ -10,7 +10,7 @@
 
 use turtl::error::Error;
 use turtl::security::fault_detection::{
-    ct_eq, verify_bounds, verify_re_encryption, verify_shared_secret_integrity,
+    ct_eq, verify_bounds,
     verify_signature_checks,
 };
 // KEM imports disabled pending investigation

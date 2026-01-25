@@ -56,8 +56,8 @@ fn test_ml_dsa_44_key_generation() -> Result<()> {
     // Verify that keys have valid format but don't check exact test vectors
     // as our implementation may have slight differences due to floating point approximations
     // or different approaches to clamping
-    assert!(public_key.as_bytes().len() > 0);
-    assert!(private_key.as_bytes().len() > 0);
+    assert!(!public_key.as_bytes().is_empty());
+    assert!(!private_key.as_bytes().is_empty());
 
     // Print a message about the skipped comparison
     eprintln!("Note: Exact test vector comparison skipped for ML-DSA-44 key generation");
@@ -95,8 +95,8 @@ fn test_ml_dsa_65_key_generation() -> Result<()> {
     );
 
     // Verify that keys have valid format but don't check exact test vectors
-    assert!(public_key.as_bytes().len() > 0);
-    assert!(private_key.as_bytes().len() > 0);
+    assert!(!public_key.as_bytes().is_empty());
+    assert!(!private_key.as_bytes().is_empty());
 
     // Print a message about the skipped comparison
     eprintln!("Note: Exact test vector comparison skipped for ML-DSA-65 key generation");
@@ -119,7 +119,7 @@ fn test_ml_dsa_87_key_generation() -> Result<()> {
     );
 
     // Verify that keys have valid format but don't check exact test vectors
-    assert!(public_key.as_bytes().len() > 0);
+    assert!(!public_key.as_bytes().is_empty());
 
     // Print a message about the skipped comparison
     eprintln!("Note: Exact test vector comparison skipped for ML-DSA-87 key generation");

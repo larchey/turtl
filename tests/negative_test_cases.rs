@@ -6,7 +6,7 @@
 
 use turtl::dsa::{self, KeyPair as DsaKeyPair, ParameterSet as DsaParameterSet, SigningMode};
 use turtl::error::Error;
-use turtl::kem::{self, ParameterSet as KemParameterSet};
+use turtl::kem::ParameterSet as KemParameterSet;
 
 // Test seeds for deterministic key generation
 const TEST_SEED_1: [u8; 32] = [
@@ -128,8 +128,8 @@ fn test_all_zero_keys() {
     let zero_pk = vec![0x00u8; 800];
     let zero_sk = vec![0x00u8; 1632];
 
-    let pk_result = turtl::kem::PublicKey::new(zero_pk, KemParameterSet::MlKem512);
-    let sk_result = turtl::kem::PrivateKey::new(zero_sk, KemParameterSet::MlKem512);
+    let _pk_result = turtl::kem::PublicKey::new(zero_pk, KemParameterSet::MlKem512);
+    let _sk_result = turtl::kem::PrivateKey::new(zero_sk, KemParameterSet::MlKem512);
 
     // All-zero keys might be accepted at construction but should fail in use
     // This depends on whether validation happens at construction or use
@@ -142,8 +142,8 @@ fn test_all_ones_keys() {
     let ones_pk = vec![0xFFu8; 800];
     let ones_sk = vec![0xFFu8; 1632];
 
-    let pk_result = turtl::kem::PublicKey::new(ones_pk, KemParameterSet::MlKem512);
-    let sk_result = turtl::kem::PrivateKey::new(ones_sk, KemParameterSet::MlKem512);
+    let _pk_result = turtl::kem::PublicKey::new(ones_pk, KemParameterSet::MlKem512);
+    let _sk_result = turtl::kem::PrivateKey::new(ones_sk, KemParameterSet::MlKem512);
 
     // All-ones keys might be accepted at construction
 }
@@ -205,8 +205,8 @@ fn test_oversized_inputs() {
 fn test_off_by_one_sizes() {
     // Test boundary conditions for ML-KEM-512
     let pk_size = KemParameterSet::MlKem512.public_key_size();
-    let sk_size = KemParameterSet::MlKem512.private_key_size();
-    let ct_size = KemParameterSet::MlKem512.ciphertext_size();
+    let _sk_size = KemParameterSet::MlKem512.private_key_size();
+    let _ct_size = KemParameterSet::MlKem512.ciphertext_size();
 
     // One byte too small
     let result = turtl::kem::PublicKey::new(vec![0; pk_size - 1], KemParameterSet::MlKem512);
@@ -255,7 +255,7 @@ fn test_verify_with_wrong_key() {
     let keypair1 = DsaKeyPair::from_seed(&TEST_SEED_1, DsaParameterSet::MlDsa44).unwrap();
     let keypair2 = DsaKeyPair::from_seed(&TEST_SEED_2, DsaParameterSet::MlDsa44).unwrap();
 
-    let public_key1 = keypair1.public_key();
+    let _public_key1 = keypair1.public_key();
     let private_key1 = keypair1.private_key();
     let public_key2 = keypair2.public_key();
 
