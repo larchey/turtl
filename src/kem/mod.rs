@@ -82,7 +82,36 @@ pub use params::ParameterSet;
 // Import ZeroizeParameterSet
 use params::ZeroizeParameterSet;
 
-/// ML-KEM public key (encapsulation key)
+/// An ML-KEM public key used for encapsulation.
+///
+/// The public key (also called the encapsulation key) is used by senders to encapsulate
+/// shared secrets for the key owner. It can be freely distributed without compromising security.
+///
+/// # Size
+///
+/// The public key size depends on the parameter set:
+/// - ML-KEM-512: 800 bytes
+/// - ML-KEM-768: 1,184 bytes
+/// - ML-KEM-1024: 1,568 bytes
+///
+/// # Example
+///
+/// ```no_run
+/// use turtl::kem::{self, ParameterSet};
+///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// // Generate a keypair
+/// let (public_key, _private_key) = kem::key_gen(ParameterSet::MlKem768)?;
+///
+/// // Public key can be serialized and transmitted
+/// let pk_bytes = public_key.as_bytes();
+/// println!("Public key size: {} bytes", pk_bytes.len());
+///
+/// // Public key stores its parameter set
+/// assert_eq!(public_key.parameter_set(), ParameterSet::MlKem768);
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Clone, Debug)]
 pub struct PublicKey {
     /// Raw byte representation of the public key
@@ -105,7 +134,41 @@ impl Zeroize for PublicKey {
 }
 
 impl PublicKey {
-    /// Create a new public key from raw bytes
+    /// Creates a new public key from raw bytes.
+    ///
+    /// This method validates that the byte length matches the expected size for the
+    /// specified parameter set before constructing the public key.
+    ///
+    /// # Arguments
+    ///
+    /// * `bytes` - The raw byte representation of the public key
+    /// * `parameter_set` - The ML-KEM parameter set (must match the key's actual parameter set)
+    ///
+    /// # Returns
+    ///
+    /// Returns a new `PublicKey` if the bytes are valid.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Error::InvalidPublicKey` if the byte length doesn't match the expected
+    /// size for the parameter set:
+    /// - ML-KEM-512 expects 800 bytes
+    /// - ML-KEM-768 expects 1,184 bytes
+    /// - ML-KEM-1024 expects 1,568 bytes
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use turtl::kem::{ParameterSet, PublicKey};
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// // Raw bytes (normally obtained from serialization or key generation)
+    /// let pk_bytes = vec![0u8; 1184]; // ML-KEM-768 size
+    ///
+    /// let public_key = PublicKey::new(pk_bytes, ParameterSet::MlKem768)?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn new(bytes: Vec<u8>, parameter_set: ParameterSet) -> Result<Self> {
         // Check if the bytes have the correct length for the parameter set
         let expected_len = parameter_set.public_key_size();
@@ -120,18 +183,82 @@ impl PublicKey {
         })
     }
 
-    /// Get the raw bytes of the public key
+    /// Returns the raw byte representation of the public key.
+    ///
+    /// This can be used to serialize the public key for transmission or storage.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use turtl::kem::{self, ParameterSet};
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let (public_key, _) = kem::key_gen(ParameterSet::MlKem768)?;
+    ///
+    /// // Get bytes for transmission
+    /// let pk_bytes = public_key.as_bytes();
+    /// // pk_bytes can be sent over a network, saved to disk, etc.
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn as_bytes(&self) -> &[u8] {
         &self.bytes
     }
 
-    /// Get the parameter set associated with this key
+    /// Returns the parameter set associated with this public key.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use turtl::kem::{self, ParameterSet};
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let (public_key, _) = kem::key_gen(ParameterSet::MlKem1024)?;
+    ///
+    /// assert_eq!(public_key.parameter_set(), ParameterSet::MlKem1024);
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn parameter_set(&self) -> ParameterSet {
         self.parameter_set
     }
 }
 
-/// ML-KEM private key (decapsulation key)
+/// An ML-KEM private key used for decapsulation.
+///
+/// The private key (also called the decapsulation key) is used by the key owner to decapsulate
+/// ciphertexts and recover shared secrets. It must be kept secret and protected.
+///
+/// # Security
+///
+/// - The private key is automatically zeroized when dropped
+/// - Never transmit or expose the private key
+/// - Store private keys securely (encrypted at rest)
+/// - The private key contains the corresponding public key data
+///
+/// # Size
+///
+/// The private key size depends on the parameter set:
+/// - ML-KEM-512: 1,632 bytes
+/// - ML-KEM-768: 2,400 bytes
+/// - ML-KEM-1024: 3,168 bytes
+///
+/// # Example
+///
+/// ```no_run
+/// use turtl::kem::{self, ParameterSet};
+///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// // Generate a keypair
+/// let (_public_key, private_key) = kem::key_gen(ParameterSet::MlKem768)?;
+///
+/// // Private key size
+/// println!("Private key size: {} bytes", private_key.as_bytes().len());
+///
+/// // Private key will be automatically zeroized when it goes out of scope
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Clone, Debug)]
 pub struct PrivateKey {
     /// Raw byte representation of the private key
@@ -157,7 +284,47 @@ impl Zeroize for PrivateKey {
 impl ZeroizeOnDrop for PrivateKey {}
 
 impl PrivateKey {
-    /// Create a new private key from raw bytes
+    /// Creates a new private key from raw bytes.
+    ///
+    /// This method validates that the byte length matches the expected size for the
+    /// specified parameter set before constructing the private key.
+    ///
+    /// # Arguments
+    ///
+    /// * `bytes` - The raw byte representation of the private key
+    /// * `parameter_set` - The ML-KEM parameter set (must match the key's actual parameter set)
+    ///
+    /// # Returns
+    ///
+    /// Returns a new `PrivateKey` if the bytes are valid.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Error::InvalidPrivateKey` if the byte length doesn't match the expected
+    /// size for the parameter set:
+    /// - ML-KEM-512 expects 1,632 bytes
+    /// - ML-KEM-768 expects 2,400 bytes
+    /// - ML-KEM-1024 expects 3,168 bytes
+    ///
+    /// # Security Warning
+    ///
+    /// Private keys must be handled with care. The resulting `PrivateKey` will be
+    /// automatically zeroized when dropped, but the input `bytes` are not zeroized
+    /// by this function.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use turtl::kem::{ParameterSet, PrivateKey};
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// // Raw bytes (normally obtained from secure storage)
+    /// let sk_bytes = vec![0u8; 2400]; // ML-KEM-768 size
+    ///
+    /// let private_key = PrivateKey::new(sk_bytes, ParameterSet::MlKem768)?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn new(bytes: Vec<u8>, parameter_set: ParameterSet) -> Result<Self> {
         // Check if the bytes have the correct length for the parameter set
         let expected_len = parameter_set.private_key_size();
@@ -172,24 +339,77 @@ impl PrivateKey {
         })
     }
 
-    /// Get the raw bytes of the private key
+    /// Returns the raw byte representation of the private key.
+    ///
+    /// # Security Warning
+    ///
+    /// Be extremely careful when using this method. The returned bytes represent
+    /// the private key material and must be protected. Consider encrypting the
+    /// bytes before storage or transmission.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use turtl::kem::{self, ParameterSet};
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let (_, private_key) = kem::key_gen(ParameterSet::MlKem768)?;
+    ///
+    /// // Get bytes for secure storage (should be encrypted)
+    /// let sk_bytes = private_key.as_bytes();
+    /// // WARNING: Protect these bytes!
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn as_bytes(&self) -> &[u8] {
         &self.bytes
     }
 
-    /// Get the parameter set associated with this key
+    /// Returns the parameter set associated with this private key.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use turtl::kem::{self, ParameterSet};
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let (_, private_key) = kem::key_gen(ParameterSet::MlKem512)?;
+    ///
+    /// assert_eq!(private_key.parameter_set(), ParameterSet::MlKem512);
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn parameter_set(&self) -> ParameterSet {
         self.parameter_set
     }
 
-    /// Extract the public key bytes from the private key
+    /// Extracts the public key bytes from the private key.
     ///
-    /// ML-KEM private key contains the public key as part of its structure.
-    /// According to FIPS 203, the private key format is:
-    /// - s (ρ, K, tr, s1, s2, t0)
+    /// ML-KEM private keys contain the corresponding public key data as part of their
+    /// structure (as specified in FIPS 203). This method extracts those bytes.
     ///
-    /// And the public key (ρ, t1) is reconstructable from these components.
-    /// This method extracts those bytes for use in verification operations.
+    /// # Returns
+    ///
+    /// Returns the raw bytes of the corresponding public key.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Error::InvalidPrivateKey` if the private key is malformed or too short.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use turtl::kem::{self, ParameterSet};
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let (expected_pk, private_key) = kem::key_gen(ParameterSet::MlKem768)?;
+    ///
+    /// // Extract public key from private key
+    /// let pk_bytes = private_key.extract_public_key_bytes()?;
+    /// assert_eq!(pk_bytes, expected_pk.as_bytes());
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn extract_public_key_bytes(&self) -> Result<Vec<u8>> {
         // Check if the private key has the minimum required length
         // Basic validation to prevent out-of-bounds access
@@ -243,14 +463,78 @@ impl PrivateKey {
         Ok(pk_bytes)
     }
 
-    /// Extract the public key from the private key
+    /// Extracts the public key from the private key.
+    ///
+    /// This is a convenience method that extracts the public key bytes and wraps
+    /// them in a `PublicKey` object.
+    ///
+    /// # Returns
+    ///
+    /// Returns the corresponding `PublicKey`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the private key is malformed.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use turtl::kem::{self, ParameterSet};
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let (expected_pk, private_key) = kem::key_gen(ParameterSet::MlKem768)?;
+    ///
+    /// // Extract public key from private key
+    /// let extracted_pk = private_key.extract_public_key()?;
+    /// assert_eq!(extracted_pk.as_bytes(), expected_pk.as_bytes());
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn extract_public_key(&self) -> Result<PublicKey> {
         let pk_bytes = self.extract_public_key_bytes()?;
         PublicKey::new(pk_bytes, self.parameter_set)
     }
 }
 
-/// ML-KEM ciphertext
+/// An ML-KEM ciphertext containing an encapsulated shared secret.
+///
+/// A ciphertext is produced during encapsulation and contains an encrypted shared secret.
+/// It can be safely transmitted over an insecure channel to the recipient, who can
+/// decapsulate it using their private key to recover the shared secret.
+///
+/// # Size
+///
+/// The ciphertext size depends on the parameter set:
+/// - ML-KEM-512: 768 bytes
+/// - ML-KEM-768: 1,088 bytes
+/// - ML-KEM-1024: 1,568 bytes
+///
+/// # Security
+///
+/// - Ciphertexts can be transmitted over insecure channels
+/// - Each ciphertext encapsulates a unique shared secret
+/// - Ciphertexts reveal no information about the shared secret
+///
+/// # Example
+///
+/// ```no_run
+/// use turtl::kem::{self, ParameterSet};
+///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// let (public_key, private_key) = kem::key_gen(ParameterSet::MlKem768)?;
+///
+/// // Encapsulate a shared secret
+/// let (ciphertext, sender_secret) = kem::encapsulate(&public_key)?;
+///
+/// // Ciphertext can be transmitted
+/// println!("Ciphertext size: {} bytes", ciphertext.as_bytes().len());
+///
+/// // Recipient decapsulates
+/// let recipient_secret = kem::decapsulate(&private_key, &ciphertext)?;
+/// assert_eq!(sender_secret, recipient_secret);
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Clone, Debug)]
 pub struct Ciphertext {
     /// Raw byte representation of the ciphertext
@@ -273,7 +557,16 @@ impl Zeroize for Ciphertext {
 }
 
 impl Ciphertext {
-    /// Create a new ciphertext from raw bytes
+    /// Creates a new ciphertext from raw bytes.
+    ///
+    /// # Arguments
+    ///
+    /// * `bytes` - The raw byte representation of the ciphertext
+    /// * `parameter_set` - The ML-KEM parameter set
+    ///
+    /// # Errors
+    ///
+    /// Returns `Error::InvalidCiphertext` if the byte length doesn't match the expected size.
     pub fn new(bytes: Vec<u8>, parameter_set: ParameterSet) -> Result<Self> {
         // Check if the bytes have the correct length for the parameter set
         let expected_len = parameter_set.ciphertext_size();
@@ -288,18 +581,52 @@ impl Ciphertext {
         })
     }
 
-    /// Get the raw bytes of the ciphertext
+    /// Returns the raw byte representation of the ciphertext.
     pub fn as_bytes(&self) -> &[u8] {
         &self.bytes
     }
 
-    /// Get the parameter set associated with this ciphertext
+    /// Returns the parameter set associated with this ciphertext.
     pub fn parameter_set(&self) -> ParameterSet {
         self.parameter_set
     }
 }
 
-/// ML-KEM shared secret
+/// A 32-byte shared secret generated by ML-KEM.
+///
+/// The shared secret is the output of both encapsulation and decapsulation. After a
+/// successful key exchange, both parties possess the same shared secret, which can be
+/// used to derive encryption and authentication keys.
+///
+/// # Security
+///
+/// - The shared secret is automatically zeroized when dropped
+/// - Always use the shared secret through a key derivation function (KDF)
+/// - Never use the raw shared secret bytes directly as encryption keys
+/// - Each encapsulation generates a fresh, independent shared secret
+///
+/// # Size
+///
+/// The shared secret is always 32 bytes (256 bits) for all ML-KEM parameter sets.
+///
+/// # Example
+///
+/// ```no_run
+/// use turtl::kem::{self, ParameterSet, shell::Shell};
+///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// let (public_key, private_key) = kem::key_gen(ParameterSet::MlKem768)?;
+/// let (ciphertext, shared_secret) = kem::encapsulate(&public_key)?;
+///
+/// // Use the shell to derive keys from the shared secret
+/// let shell = Shell::new(shared_secret);
+/// let encryption_key = shell.derive_encryption_key();
+/// let auth_key = shell.derive_authentication_key();
+///
+/// // Use derived keys for encryption/authentication
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SharedSecret {
     /// Raw byte representation of the shared secret
@@ -317,12 +644,42 @@ impl Zeroize for SharedSecret {
 impl ZeroizeOnDrop for SharedSecret {}
 
 impl SharedSecret {
-    /// Create a new shared secret from raw bytes
+    /// Creates a new shared secret from a 32-byte array.
+    ///
+    /// # Arguments
+    ///
+    /// * `bytes` - A 32-byte array containing the shared secret
+    ///
+    /// # Security Warning
+    ///
+    /// This method does not zeroize the input `bytes`. If you need to ensure the
+    /// input is zeroized, do so manually after calling this method.
     pub fn new(bytes: [u8; 32]) -> Self {
         Self { bytes }
     }
 
-    /// Get the raw bytes of the shared secret
+    /// Returns a reference to the raw 32-byte shared secret.
+    ///
+    /// # Security Warning
+    ///
+    /// The shared secret should be used through a key derivation function (KDF) rather
+    /// than directly. Consider using [`shell::Shell`](crate::kem::shell::Shell) to derive keys.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use turtl::kem::{self, ParameterSet};
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let (pk, sk) = kem::key_gen(ParameterSet::MlKem768)?;
+    /// let (_, shared_secret) = kem::encapsulate(&pk)?;
+    ///
+    /// // Get the raw bytes (for KDF input)
+    /// let secret_bytes = shared_secret.as_bytes();
+    /// assert_eq!(secret_bytes.len(), 32);
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn as_bytes(&self) -> &[u8; 32] {
         &self.bytes
     }
