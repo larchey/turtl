@@ -340,6 +340,14 @@ impl NTTContext {
     /// Uses Cooley-Tukey butterfly operations
     /// Implementation follows reference Dilithium: https://github.com/pq-crystals/dilithium/blob/master/ref/ntt.c
     fn forward_mldsa(&self, polynomial: &mut Polynomial) -> Result<()> {
+        // First, normalize input coefficients to [0, q-1] range
+        // ML-DSA uses centered representation, so negative values need to be converted
+        for coeff in polynomial.coeffs.iter_mut() {
+            if *coeff < 0 || *coeff >= self.modulus {
+                *coeff = coeff.rem_euclid(self.modulus);
+            }
+        }
+
         let mut k = 0; // Start from k=0, will pre-increment to k=1 on first use
         let mut len = 128;
 
@@ -352,13 +360,18 @@ impl NTTContext {
                     // Use Montgomery reduction as in reference implementation
                     let t = self.montgomery_reduce(zeta as i64 * polynomial.coeffs[j + len] as i64);
 
-                    // Butterfly operations without intermediate modulo reduction
+                    // Butterfly operations
                     polynomial.coeffs[j + len] = polynomial.coeffs[j] - t;
                     polynomial.coeffs[j] += t;
                 }
             }
 
             len >>= 1;
+        }
+
+        // Reduce all coefficients to canonical form [0, q-1]
+        for coeff in polynomial.coeffs.iter_mut() {
+            *coeff = coeff.rem_euclid(self.modulus);
         }
 
         Ok(())
@@ -441,6 +454,13 @@ impl NTTContext {
     /// Uses Gentleman-Sande butterfly operations (inverse of Cooley-Tukey)
     /// Implementation follows reference Dilithium: https://github.com/pq-crystals/dilithium/blob/master/ref/ntt.c
     fn inverse_mldsa(&self, polynomial: &mut Polynomial) -> Result<()> {
+        // Normalize input coefficients to [0, q-1] range
+        for coeff in polynomial.coeffs.iter_mut() {
+            if *coeff < 0 || *coeff >= self.modulus {
+                *coeff = coeff.rem_euclid(self.modulus);
+            }
+        }
+
         // Reference uses k=256, pre-decrements to 255 on first use
         // Forward uses k going 1..256, inverse uses k going 255..1
         let mut k = 256;
@@ -455,7 +475,7 @@ impl NTTContext {
                 for j in start..(start + len) {
                     let t = polynomial.coeffs[j];
 
-                    // Butterfly operations without intermediate modulo reduction
+                    // Butterfly operations
                     polynomial.coeffs[j] = t + polynomial.coeffs[j + len];
                     polynomial.coeffs[j + len] = t - polynomial.coeffs[j + len];
 
@@ -481,6 +501,11 @@ impl NTTContext {
         // Note: In actual Dilithium usage, polynomials often stay in Montgomery form
         // for efficiency, but for our API we convert back to normal form
         self.poly_from_montgomery(polynomial);
+
+        // Final reduction to ensure all coefficients are in [0, q-1]
+        for coeff in polynomial.coeffs.iter_mut() {
+            *coeff = coeff.rem_euclid(self.modulus);
+        }
 
         Ok(())
     }
