@@ -2,9 +2,9 @@
 //!
 //! This module defines the parameter sets for ML-KEM as specified in NIST FIPS 203.
 //!
-//! ML-KEM is defined over a polynomial ring R_q = Z_q[X]/(X^n + 1) where:
-//! - n = 256 (the polynomial degree)
-//! - q = 3329 (the modulus)
+//! ML-KEM is defined over a polynomial ring `R_q = Z_q[X]/(X^n + 1)` where:
+//! - `n = 256` (the polynomial degree)
+//! - `q = 3329` (the modulus)
 //!
 //! Three parameter sets are defined (ML-KEM-512, ML-KEM-768, ML-KEM-1024)
 //! with different security levels and parameters.

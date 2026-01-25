@@ -328,18 +328,164 @@ impl SharedSecret {
     }
 }
 
-/// Generate a new ML-KEM key pair
+/// Generates a new ML-KEM keypair for the specified parameter set.
+///
+/// This is a convenience function that generates both the public and private keys,
+/// returning them as a tuple. It's equivalent to calling [`KeyPair::generate`] and
+/// then extracting the keys.
+///
+/// # Arguments
+///
+/// * `parameter_set` - The ML-KEM parameter set to use:
+///   - [`ParameterSet::MlKem512`]: Security category 1 (128-bit security)
+///   - [`ParameterSet::MlKem768`]: Security category 3 (192-bit security, recommended)
+///   - [`ParameterSet::MlKem1024`]: Security category 5 (256-bit security)
+///
+/// # Returns
+///
+/// Returns a tuple of `(PublicKey, PrivateKey)`:
+/// - The `PublicKey` can be shared with others for encapsulation
+/// - The `PrivateKey` must be kept secret for decapsulation
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The random number generator fails
+/// - Internal key generation operations fail
+///
+/// # Example
+///
+/// ```no_run
+/// use turtl::kem::{self, ParameterSet};
+///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// // Generate a keypair with recommended security
+/// let (public_key, private_key) = kem::key_gen(ParameterSet::MlKem768)?;
+///
+/// // Public key can be shared
+/// println!("Public key: {} bytes", public_key.as_bytes().len());
+///
+/// // Private key must be kept secret
+/// // It will be automatically zeroized when dropped
+/// # Ok(())
+/// # }
+/// ```
 pub fn key_gen(parameter_set: ParameterSet) -> Result<(PublicKey, PrivateKey)> {
     let keypair = keypair::generate(parameter_set)?;
     Ok((keypair.public_key(), keypair.private_key()))
 }
 
-/// Encapsulate a shared secret using a public key
+/// Encapsulates a random shared secret using the recipient's public key.
+///
+/// This function generates a fresh 32-byte shared secret and encrypts it using the
+/// provided public key, producing a ciphertext. Both the shared secret and ciphertext
+/// are returned. The shared secret can be used to derive encryption keys, while the
+/// ciphertext should be transmitted to the recipient.
+///
+/// This is a convenience function equivalent to calling [`encapsulate::encapsulate`].
+///
+/// # Arguments
+///
+/// * `public_key` - The recipient's ML-KEM public key
+///
+/// # Returns
+///
+/// Returns a tuple of `(Ciphertext, SharedSecret)`:
+/// - The `Ciphertext` should be sent to the recipient
+/// - The `SharedSecret` should be used locally for deriving encryption keys
+///
+/// Both parties will have the same shared secret after decapsulation.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The public key is invalid or malformed
+/// - Random number generation fails
+/// - Internal cryptographic operations fail
+///
+/// # Security
+///
+/// - Each call generates a fresh, independent shared secret
+/// - Constant-time operations protect against timing attacks
+/// - The shared secret is automatically zeroized when dropped
+///
+/// # Example
+///
+/// ```no_run
+/// use turtl::kem::{self, ParameterSet};
+///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// // Recipient generates keypair
+/// let (public_key, _private_key) = kem::key_gen(ParameterSet::MlKem768)?;
+///
+/// // Sender encapsulates a shared secret
+/// let (ciphertext, shared_secret) = kem::encapsulate(&public_key)?;
+///
+/// // Send ciphertext to recipient
+/// println!("Ciphertext: {} bytes", ciphertext.as_bytes().len());
+/// println!("Shared secret: {} bytes", shared_secret.as_bytes().len());
+/// # Ok(())
+/// # }
+/// ```
 pub fn encapsulate(public_key: &PublicKey) -> Result<(Ciphertext, SharedSecret)> {
     encapsulate::encapsulate(public_key)
 }
 
-/// Decapsulate a shared secret using a private key and ciphertext
+/// Decapsulates a shared secret from a ciphertext using the private key.
+///
+/// This function recovers the shared secret that was encapsulated by the sender.
+/// After successful decapsulation, both the sender and recipient will possess
+/// the same 32-byte shared secret.
+///
+/// This is a convenience function equivalent to calling [`decapsulate::decapsulate`].
+///
+/// # Arguments
+///
+/// * `private_key` - The recipient's ML-KEM private key
+/// * `ciphertext` - The ciphertext received from the sender
+///
+/// # Returns
+///
+/// Returns the 32-byte `SharedSecret` that was encapsulated in the ciphertext.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The private key and ciphertext use different parameter sets
+/// - The ciphertext has invalid length
+/// - Internal cryptographic operations fail
+///
+/// Note: Due to implicit rejection, invalid ciphertexts produce a pseudorandom
+/// shared secret rather than an error in most cases.
+///
+/// # Security
+///
+/// - Uses implicit rejection to prevent chosen-ciphertext attacks
+/// - Constant-time operations protect against timing attacks
+/// - Re-encryption check protects against fault injection attacks
+/// - The shared secret is automatically zeroized when dropped
+///
+/// # Example
+///
+/// ```no_run
+/// use turtl::kem::{self, ParameterSet};
+///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// // Complete key exchange
+/// let (public_key, private_key) = kem::key_gen(ParameterSet::MlKem768)?;
+///
+/// // Sender encapsulates
+/// let (ciphertext, sender_secret) = kem::encapsulate(&public_key)?;
+///
+/// // Recipient decapsulates
+/// let recipient_secret = kem::decapsulate(&private_key, &ciphertext)?;
+///
+/// // Both parties have the same shared secret
+/// assert_eq!(sender_secret, recipient_secret);
+/// println!("Key exchange successful!");
+/// # Ok(())
+/// # }
+/// ```
 pub fn decapsulate(private_key: &PrivateKey, ciphertext: &Ciphertext) -> Result<SharedSecret> {
     decapsulate::decapsulate(private_key, ciphertext)
 }
