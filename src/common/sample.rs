@@ -49,7 +49,7 @@ impl SampleInBall {
             let mut positions = Vec::with_capacity(self.tau);
             for i in 0..self.tau {
                 // Create a deterministic position based on seed hash
-                let pos = ((hash_bytes[i % hash_bytes.len()] as usize + i * 7) % 256) as usize;
+                let pos = (hash_bytes[i % hash_bytes.len()] as usize + i * 7) % 256;
                 positions.push(pos);
             }
 

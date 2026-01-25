@@ -136,8 +136,6 @@ fn bench_all_parameter_sets(c: &mut Criterion) {
             ParameterSet::MlKem512 => "512",
             ParameterSet::MlKem768 => "768",
             ParameterSet::MlKem1024 => "1024",
-            #[cfg(test)]
-            _ => "test",
         };
 
         group.bench_with_input(BenchmarkId::new("KeyGen", name), &param_set, |b, &ps| {

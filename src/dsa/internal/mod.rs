@@ -32,7 +32,7 @@ pub(crate) fn seed_to_keypair(
             let private_key = PrivateKey::new(private_key_bytes, parameter_set)?;
 
             // Return the key pair
-            return Ok(super::KeyPair::from_keys(public_key, private_key)?);
+            return super::KeyPair::from_keys(public_key, private_key);
         }
     }
 
