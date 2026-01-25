@@ -137,7 +137,7 @@ impl NTTContext {
                 let u32_qinv = self.qinv as u32;
 
                 // Perform 16-bit Montgomery reduction
-                let mut t: u32 = ((u32_a & 0xFFFF) * u32_qinv) & 0xFFFF;
+                let t: u32 = ((u32_a & 0xFFFF) * u32_qinv) & 0xFFFF;
                 let v: i32 = ((a as i32) - (t as i32 * self.modulus)) >> 16;
 
                 // Ensure the result is in [0, q-1]
@@ -228,7 +228,7 @@ impl NTTContext {
                 let u32_qinv = self.qinv as u32;
 
                 // Perform 16-bit Montgomery reduction
-                let mut t: u32 = ((u32_a & 0xFFFF) * u32_qinv) & 0xFFFF;
+                let t: u32 = ((u32_a & 0xFFFF) * u32_qinv) & 0xFFFF;
                 let v: i32 = ((a as i32) - (t as i32 * self.modulus)) >> 16;
 
                 // Ensure the result is in [0, q-1]

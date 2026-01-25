@@ -1289,13 +1289,13 @@ fn encode_public_key(
     // Calculate t1 size - coefficients are in [0, (q-1)/2^d]
     let max_value = (8380417 - 1) >> d;
     let bits_per_coeff = bitlen(max_value as u32);
-    let t1_size = k * ((256 * bits_per_coeff + 7) / 8);
+    let _t1_size = k * ((256 * bits_per_coeff + 7) / 8);
 
     #[cfg(test)]
     let public_key_size = match parameter_set {
         ParameterSet::TestSmall => {
             // Use actual calculated size for test parameter
-            32 + t1_size
+            32 + _t1_size
         }
         _ => parameter_set.public_key_size(),
     };
