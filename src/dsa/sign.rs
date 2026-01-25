@@ -3,7 +3,7 @@
 //! This module implements the signing algorithms for ML-DSA.
 
 use super::internal::{ml_dsa_hash_sign_internal, ml_dsa_sign_internal};
-use super::{HashFunction, ParameterSet, PrivateKey, Signature, SigningMode};
+use super::{HashFunction, PrivateKey, Signature, SigningMode};
 use crate::error::{Error, Result};
 use rand::{rngs::OsRng, RngCore};
 
