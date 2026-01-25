@@ -878,7 +878,7 @@ fn sample_uniform_poly(seed: &[u8], gamma1: usize) -> Result<Polynomial> {
 
     // Calculate how many bits needed per coefficient
     let bits_needed = bitlen((2 * gamma1 - 2) as u32);
-    let bytes_per_coeff = bits_needed.div_ceil(8);
+    let bytes_per_coeff = (bits_needed + 7) / 8;
 
     for i in 0..256 {
         let mut valid_coeff = false;
@@ -1110,7 +1110,7 @@ fn encode_w1(w1: &[Polynomial]) -> Result<Vec<u8>> {
     let bits_per_coeff = 6;
 
     // Calculate number of bytes needed per polynomial
-    let bytes_per_poly = (256_usize * bits_per_coeff).div_ceil(8);
+    let bytes_per_poly = (256_usize * bits_per_coeff + 7) / 8;
     let mut result = Vec::with_capacity(k * bytes_per_poly);
 
     for i in 0..k {
@@ -1176,7 +1176,7 @@ fn encode_w1(w1: &[Polynomial]) -> Result<Vec<u8>> {
         }
 
         // Pack bits into bytes
-        for b in 0..bits.len().div_ceil(8) {
+        for b in 0..(bits.len() + 7) / 8 {
             let mut byte = 0u8;
             for j in 0..8 {
                 if b * 8 + j < bits.len() {
@@ -1289,7 +1289,7 @@ fn encode_public_key(
     // Calculate t1 size - coefficients are in [0, (q-1)/2^d]
     let max_value = (8380417 - 1) >> d;
     let bits_per_coeff = bitlen(max_value as u32);
-    let _t1_size = k * (256usize * bits_per_coeff).div_ceil(8);
+    let _t1_size = k * ((256usize * bits_per_coeff + 7) / 8);
 
     #[cfg(test)]
     let public_key_size = match parameter_set {
@@ -1335,12 +1335,12 @@ fn encode_private_key(
     let s_max_value = eta as u32;
     let _s_bits_per_coeff = bitlen(2 * s_max_value);
     #[cfg(test)]
-    let s_size = (l + k) * (256 * _s_bits_per_coeff).div_ceil(8);
+    let s_size = (l + k) * ((256 * _s_bits_per_coeff + 7) / 8);
 
     let t0_max_value = (1 << d) - 1;
     let t0_bits_per_coeff = bitlen(t0_max_value);
     #[cfg(test)]
-    let t0_size = k * (256 * t0_bits_per_coeff).div_ceil(8);
+    let t0_size = k * ((256 * t0_bits_per_coeff + 7) / 8);
 
     // Calculate private key size
     #[cfg(test)]
@@ -1402,7 +1402,7 @@ fn decode_public_key(
     // Extract t1
     let max_value = (8380417 - 1) >> d;
     let bits_per_coeff = bitlen(max_value as u32);
-    let bytes_per_poly = (256_usize * bits_per_coeff).div_ceil(8);
+    let bytes_per_poly = (256_usize * bits_per_coeff + 7) / 8;
 
     // Check if we have enough bytes for the t1 polynomials
     if public_key_bytes.len() < 32 + k * bytes_per_poly {
@@ -1465,11 +1465,11 @@ fn decode_private_key(
     // Calculate sizes
     let s_max_value = eta as u32;
     let _s_bits_per_coeff = bitlen(2 * s_max_value);
-    let s_bytes_per_poly = (256 * _s_bits_per_coeff).div_ceil(8);
+    let s_bytes_per_poly = (256 * _s_bits_per_coeff + 7) / 8;
 
     let t0_max_value = (1 << d) - 1;
     let t0_bits_per_coeff = bitlen(t0_max_value);
-    let t0_bytes_per_poly = (256 * t0_bits_per_coeff).div_ceil(8);
+    let t0_bytes_per_poly = (256 * t0_bits_per_coeff + 7) / 8;
 
     // Check if private key has enough bytes
     let required_size = 128 + // rho + key + tr
@@ -1561,7 +1561,7 @@ fn decode_signature(
     // Extract z
     let z_max_value = gamma1 as u32 - 1;
     let z_bits_per_coeff = bitlen(2 * z_max_value);
-    let z_bytes_per_poly = (256 * z_bits_per_coeff).div_ceil(8);
+    let z_bytes_per_poly = (256 * z_bits_per_coeff + 7) / 8;
 
     // Calculate the required signature size
     let required_size = lambda / 4 + (l * z_bytes_per_poly) + omega + k;
@@ -1674,7 +1674,7 @@ fn encode_poly(poly: &Polynomial, bits: usize, bound: u32) -> Result<Vec<u8>> {
         }
     }
 
-    let bytes_needed = bits_array.len().div_ceil(8);
+    let bytes_needed = (bits_array.len() + 7) / 8;
     let mut result = vec![0u8; bytes_needed];
 
     for i in 0..bytes_needed {
@@ -1692,7 +1692,7 @@ fn encode_poly(poly: &Polynomial, bits: usize, bound: u32) -> Result<Vec<u8>> {
 
 /// Decode a polynomial with coefficients in [0, bound]
 fn decode_poly(bytes: &[u8], bits: usize, bound: u32) -> Result<Polynomial> {
-    let bytes_needed = (256 * bits).div_ceil(8);
+    let bytes_needed = (256 * bits + 7) / 8;
     if bytes.len() < bytes_needed {
         return Err(Error::EncodingError(format!(
             "Not enough bytes for polynomial: have {}, need {}",
@@ -1769,7 +1769,7 @@ fn encode_poly_signed(poly: &Polynomial, a: usize, b: usize) -> Result<Vec<u8>> 
         }
     }
 
-    let bytes_needed = bits_array.len().div_ceil(8);
+    let bytes_needed = (bits_array.len() + 7) / 8;
     let mut result = vec![0u8; bytes_needed];
 
     for i in 0..bytes_needed {
@@ -1788,7 +1788,7 @@ fn encode_poly_signed(poly: &Polynomial, a: usize, b: usize) -> Result<Vec<u8>> 
 /// Decode a polynomial with coefficients in [-a, b]
 fn decode_poly_signed(bytes: &[u8], a: usize, b: usize) -> Result<Polynomial> {
     let bits = bitlen((a + b) as u32);
-    let bytes_needed = (256 * bits).div_ceil(8);
+    let bytes_needed = (256 * bits + 7) / 8;
 
     if bytes.len() < bytes_needed {
         return Err(Error::EncodingError(format!(
@@ -1843,7 +1843,7 @@ fn encode_signature(
 
     // Calculate signature size
     let z_bits_per_coeff = bitlen((2 * gamma1 - 2) as u32);
-    let _z_bytes_per_poly = (256 * z_bits_per_coeff).div_ceil(8);
+    let _z_bytes_per_poly = (256 * z_bits_per_coeff + 7) / 8;
     #[cfg(test)]
     let z_size = l * _z_bytes_per_poly;
 
