@@ -43,8 +43,10 @@ fn test_mldsa_ntt_roundtrip() {
         if error > 0 {
             matches = false;
             if i < 10 {
-                println!("Mismatch at {}: original={} (normalized={}), recovered={}",
-                    i, original.coeffs[i], orig_normalized, recovered_normalized);
+                println!(
+                    "Mismatch at {}: original={} (normalized={}), recovered={}",
+                    i, original.coeffs[i], orig_normalized, recovered_normalized
+                );
             }
         }
     }
@@ -52,7 +54,10 @@ fn test_mldsa_ntt_roundtrip() {
     println!("Round-trip successful: {}", matches);
     println!("Max error: {}", max_error);
 
-    assert!(matches, "NTT round-trip should recover original coefficients");
+    assert!(
+        matches,
+        "NTT round-trip should recover original coefficients"
+    );
 }
 
 #[test]
@@ -82,6 +87,9 @@ fn test_mldsa_ntt_preserves_small_values() {
     // For a constant polynomial, NTT should also be bounded
     // This is a sanity check - the exact value depends on NTT definition
     // but it shouldn't be in the millions
-    assert!(max_coeff < 1_000_000,
-        "NTT of small constant should not produce huge coefficients: max={}", max_coeff);
+    assert!(
+        max_coeff < 1_000_000,
+        "NTT of small constant should not produce huge coefficients: max={}",
+        max_coeff
+    );
 }

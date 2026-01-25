@@ -1,20 +1,20 @@
 //! ML-DSA (Module-Lattice-Based Digital Signature Algorithm) implementation.
-//! 
+//!
 //! This module implements the ML-DSA algorithm as specified in NIST FIPS 204.
 //! ML-DSA is a post-quantum digital signature scheme based on the Module-LWE problem.
 
 use crate::error::{Error, Result};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-pub mod params;
-pub mod keypair;
-pub mod sign;
-pub mod verify;
-pub mod stamp;
 mod internal;
+pub mod keypair;
+pub mod params;
+pub mod sign;
+pub mod stamp;
+pub mod verify;
 
-pub use params::ParameterSet;
 pub use keypair::KeyPair;
+pub use params::ParameterSet;
 
 // Import ZeroizeParameterSet
 use params::ZeroizeParameterSet;
@@ -65,25 +65,25 @@ impl PublicKey {
                 });
             }
         }
-        
+
         // For non-test parameter sets, check if the bytes have the correct length
         let expected_len = parameter_set.public_key_size();
         if bytes.len() != expected_len {
             return Err(Error::InvalidPublicKey);
         }
-        
+
         Ok(Self {
             bytes,
             parameter_set,
             _zeroize_param: ZeroizeParameterSet(parameter_set),
         })
     }
-    
+
     /// Get the raw bytes of the public key
     pub fn as_bytes(&self) -> &[u8] {
         &self.bytes
     }
-    
+
     /// Get the parameter set associated with this key
     pub fn parameter_set(&self) -> ParameterSet {
         self.parameter_set
@@ -130,25 +130,25 @@ impl PrivateKey {
                 });
             }
         }
-        
+
         // For non-test parameter sets, check if the bytes have the correct length
         let expected_len = parameter_set.private_key_size();
         if bytes.len() != expected_len {
             return Err(Error::InvalidPrivateKey);
         }
-        
+
         Ok(Self {
             bytes,
             parameter_set,
             _zeroize_param: ZeroizeParameterSet(parameter_set),
         })
     }
-    
+
     /// Get the raw bytes of the private key
     pub fn as_bytes(&self) -> &[u8] {
         &self.bytes
     }
-    
+
     /// Get the parameter set associated with this key
     pub fn parameter_set(&self) -> ParameterSet {
         self.parameter_set
@@ -192,25 +192,25 @@ impl Signature {
                 });
             }
         }
-        
+
         // For non-test parameter sets, check if the bytes have the correct length
         let expected_len = parameter_set.signature_size();
         if bytes.len() != expected_len {
             return Err(Error::InvalidSignature);
         }
-        
+
         Ok(Self {
             bytes,
             parameter_set,
             _zeroize_param: ZeroizeParameterSet(parameter_set),
         })
     }
-    
+
     /// Get the raw bytes of the signature
     pub fn as_bytes(&self) -> &[u8] {
         &self.bytes
     }
-    
+
     /// Get the parameter set associated with this signature
     pub fn parameter_set(&self) -> ParameterSet {
         self.parameter_set
@@ -238,8 +238,8 @@ pub fn key_gen(parameter_set: ParameterSet) -> Result<(PublicKey, PrivateKey)> {
 
 /// Sign a message
 pub fn sign(
-    private_key: &PrivateKey, 
-    message: &[u8], 
+    private_key: &PrivateKey,
+    message: &[u8],
     context: &[u8],
     mode: SigningMode,
 ) -> Result<Signature> {
@@ -248,8 +248,8 @@ pub fn sign(
 
 /// Verify a signature
 pub fn verify(
-    public_key: &PublicKey, 
-    message: &[u8], 
+    public_key: &PublicKey,
+    message: &[u8],
     signature: &Signature,
     context: &[u8],
 ) -> Result<bool> {
@@ -258,8 +258,8 @@ pub fn verify(
 
 /// Sign a message with pre-hashing
 pub fn hash_sign(
-    private_key: &PrivateKey, 
-    message: &[u8], 
+    private_key: &PrivateKey,
+    message: &[u8],
     context: &[u8],
     hash_function: HashFunction,
     mode: SigningMode,
@@ -269,8 +269,8 @@ pub fn hash_sign(
 
 /// Verify a signature with pre-hashing
 pub fn hash_verify(
-    public_key: &PublicKey, 
-    message: &[u8], 
+    public_key: &PublicKey,
+    message: &[u8],
     signature: &Signature,
     context: &[u8],
     hash_function: HashFunction,

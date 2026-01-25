@@ -9,24 +9,17 @@ fn test_simple_sign() {
     let message = b"Hello, world!";
 
     println!("Attempting to sign message...");
-    let result = dsa::sign(
-        &private_key,
-        message,
-        b"",
-        SigningMode::Deterministic,
-    );
+    let result = dsa::sign(&private_key, message, b"", SigningMode::Deterministic);
 
     match result {
         Ok(signature) => {
-            println!("✓ Signature created successfully! Size: {} bytes", signature.as_bytes().len());
+            println!(
+                "✓ Signature created successfully! Size: {} bytes",
+                signature.as_bytes().len()
+            );
 
             // Verify the signature
-            let verify_result = dsa::verify(
-                &public_key,
-                message,
-                &signature,
-                b"",
-            ).unwrap();
+            let verify_result = dsa::verify(&public_key, message, &signature, b"").unwrap();
 
             assert!(verify_result, "Signature should verify");
             println!("✓ Signature verified successfully!");

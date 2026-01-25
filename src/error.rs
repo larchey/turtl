@@ -11,40 +11,40 @@ use core::fmt;
 pub enum Error {
     /// Randomness generation failed
     RandomnessError,
-    
+
     /// Invalid public key
     InvalidPublicKey,
-    
+
     /// Invalid private key
     InvalidPrivateKey,
-    
+
     /// Invalid ciphertext
     InvalidCiphertext,
-    
+
     /// Invalid signature
     InvalidSignature,
-    
+
     /// Context string too long
     ContextTooLong,
-    
+
     /// Input/output error
     IoError(String),
-    
+
     /// Verification failed
     VerificationFailed,
-    
+
     /// Invalid parameter set
     InvalidParameterSet,
-    
+
     /// Encoding error
     EncodingError(String),
-    
+
     /// Fault detected during cryptographic operation
     FaultDetected,
-    
+
     /// Invalid input parameter value
     InvalidParameter(String),
-    
+
     /// Security boundary violation
     SecurityBoundaryViolation,
 }
