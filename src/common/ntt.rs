@@ -593,42 +593,106 @@ mod tests {
     fn test_mldsa_ntt_roundtrip() {
         let ctx = NTTContext::new(NTTType::MLDSA);
 
-        // Create a very simple test polynomial with minimal values
+        // Test with simple pattern
         let mut poly = Polynomial::new();
-        // Just use a simple pattern that won't cause numerical issues
         for i in 0..256 {
             poly.coeffs[i] = i as i32 % 5;
         }
 
-        // Make a copy before transformation
         let original = poly.clone();
 
         // Forward NTT should transform the polynomial
         ctx.forward(&mut poly).unwrap();
 
-        // Ensure transformation did something (poly should be different)
+        // Ensure transformation did something
         assert_ne!(poly.coeffs[0], original.coeffs[0]);
 
-        // Correct any out-of-range coefficients
-        for coeff in &mut poly.coeffs {
-            if *coeff < 0 || *coeff >= ctx.modulus {
-                *coeff = coeff.rem_euclid(ctx.modulus);
-            }
+        // Verify all coefficients are in valid range after forward NTT
+        for coeff in &poly.coeffs {
+            assert!(
+                *coeff >= 0 && *coeff < ctx.modulus,
+                "Forward NTT coefficient {} out of range [0, {})",
+                coeff,
+                ctx.modulus
+            );
         }
 
-        // Inverse should produce a valid polynomial
+        // Inverse should restore the original
         ctx.inverse(&mut poly).unwrap();
 
-        // Correct any out-of-range coefficients
-        for coeff in &mut poly.coeffs {
-            if *coeff < 0 || *coeff >= ctx.modulus {
-                *coeff = coeff.rem_euclid(ctx.modulus);
-            }
+        // Verify all coefficients are in valid range after inverse NTT
+        for coeff in &poly.coeffs {
+            assert!(
+                *coeff >= 0 && *coeff < ctx.modulus,
+                "Inverse NTT coefficient {} out of range [0, {})",
+                coeff,
+                ctx.modulus
+            );
         }
 
-        // After post-processing, just verify coefficients are in range [0, q-1]
-        for coeff in poly.coeffs.iter() {
-            assert!(*coeff >= 0 && *coeff < ctx.modulus);
+        // Verify roundtrip correctness
+        for i in 0..256 {
+            assert_eq!(
+                poly.coeffs[i], original.coeffs[i],
+                "Coefficient mismatch at index {}: got {}, expected {}",
+                i, poly.coeffs[i], original.coeffs[i]
+            );
+        }
+    }
+
+    #[test]
+    fn test_mldsa_ntt_roundtrip_with_negatives() {
+        let ctx = NTTContext::new(NTTType::MLDSA);
+
+        // Test with pattern including negative values (as mentioned in task)
+        // This tests centered representation handling
+        let mut poly = Polynomial::new();
+        for i in 0..256 {
+            poly.coeffs[i] = if i % 2 == 0 { 2 } else { -1 };
+        }
+
+        let original = poly.clone();
+
+        // Forward NTT
+        ctx.forward(&mut poly).unwrap();
+
+        // Verify coefficients are in valid range
+        for (i, coeff) in poly.coeffs.iter().enumerate() {
+            assert!(
+                *coeff >= 0 && *coeff < ctx.modulus,
+                "Forward NTT coefficient at index {} is {} (out of range [0, {}))",
+                i,
+                coeff,
+                ctx.modulus
+            );
+        }
+
+        // Inverse NTT
+        ctx.inverse(&mut poly).unwrap();
+
+        // Verify coefficients are in valid range
+        for coeff in &poly.coeffs {
+            assert!(
+                *coeff >= 0 && *coeff < ctx.modulus,
+                "Inverse NTT coefficient {} out of range [0, {})",
+                coeff,
+                ctx.modulus
+            );
+        }
+
+        // Verify roundtrip correctness
+        // Note: negative values get normalized to [0, q-1], so -1 becomes q-1
+        for i in 0..256 {
+            let expected = if original.coeffs[i] < 0 {
+                original.coeffs[i] + ctx.modulus
+            } else {
+                original.coeffs[i]
+            };
+            assert_eq!(
+                poly.coeffs[i], expected,
+                "Coefficient mismatch at index {}: got {}, expected {}",
+                i, poly.coeffs[i], expected
+            );
         }
     }
 
