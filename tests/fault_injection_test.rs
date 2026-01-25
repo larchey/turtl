@@ -10,8 +10,8 @@
 
 use turtl::error::Error;
 use turtl::security::fault_detection::{
-    ct_eq, verify_re_encryption, verify_signature_checks,
-    verify_shared_secret_integrity, verify_bounds,
+    ct_eq, verify_bounds, verify_re_encryption, verify_shared_secret_integrity,
+    verify_signature_checks,
 };
 // KEM imports disabled pending investigation
 // use turtl::kem::{self, ParameterSet};
@@ -41,7 +41,10 @@ fn test_ct_eq_different_lengths() {
     let a = vec![0x42u8; 32];
     let b = vec![0x42u8; 16];
 
-    assert!(!ct_eq(&a, &b), "Different length slices should return false");
+    assert!(
+        !ct_eq(&a, &b),
+        "Different length slices should return false"
+    );
 }
 
 /// Test constant-time equality detects single bit flip
@@ -138,7 +141,7 @@ fn test_ct_eq_multiple_bit_flips() {
     let mut b = vec![0xAAu8; 32];
 
     // Flip multiple bits across different bytes
-    b[0] ^= 0x01;  // Flip bit 0
+    b[0] ^= 0x01; // Flip bit 0
     b[15] ^= 0x80; // Flip bit 7
     b[31] ^= 0x0F; // Flip bits 0-3
 
@@ -156,7 +159,10 @@ fn test_ct_eq_adjacent_corruption() {
     b[11] = 0xFF;
     b[12] = 0xFF;
 
-    assert!(!ct_eq(&a, &b), "Adjacent byte corruption should be detected");
+    assert!(
+        !ct_eq(&a, &b),
+        "Adjacent byte corruption should be detected"
+    );
 }
 
 /// Test bounds checking for polynomial coefficients

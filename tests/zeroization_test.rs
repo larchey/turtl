@@ -81,9 +81,7 @@ fn test_zeroize_on_drop() {
         data: [u8; 32],
     }
 
-    let secret = Secret {
-        data: [0x42u8; 32],
-    };
+    let secret = Secret { data: [0x42u8; 32] };
 
     let ptr = secret.data.as_ptr();
 
@@ -203,8 +201,8 @@ fn test_large_buffer_zeroization() {
 /// Test that zeroization happens even in panic scenarios
 #[test]
 fn test_zeroization_on_panic() {
-    use zeroize::{Zeroize, ZeroizeOnDrop};
     use std::panic;
+    use zeroize::{Zeroize, ZeroizeOnDrop};
 
     #[derive(Zeroize, ZeroizeOnDrop)]
     struct PanicSecret {
@@ -278,9 +276,7 @@ fn test_nested_structure_zeroization() {
     }
 
     let mut outer = OuterSecret {
-        inner: InnerSecret {
-            key: [0xAAu8; 16],
-        },
+        inner: InnerSecret { key: [0xAAu8; 16] },
         outer_key: vec![0xBBu8; 32],
     };
 
@@ -307,16 +303,15 @@ fn test_zeroization_with_copy_types() {
     }
 
     // Even though CopyData is Copy, we can still zeroize arrays of it
-    let mut data = [CopyData { value: 0x4242424242424242 }; 8];
+    let mut data = [CopyData {
+        value: 0x4242424242424242,
+    }; 8];
 
     assert_eq!(data[0].value, 0x4242424242424242);
 
     // Zeroize the array by converting to bytes
     let data_bytes = unsafe {
-        std::slice::from_raw_parts_mut(
-            data.as_mut_ptr() as *mut u8,
-            std::mem::size_of_val(&data)
-        )
+        std::slice::from_raw_parts_mut(data.as_mut_ptr() as *mut u8, std::mem::size_of_val(&data))
     };
     data_bytes.zeroize();
 

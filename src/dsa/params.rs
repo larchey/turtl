@@ -1,5 +1,5 @@
 //! Parameter sets for ML-DSA.
-//! 
+//!
 //! This module defines the parameter sets for ML-DSA as specified in NIST FIPS 204.
 
 // We'll bring in Copy, Default, and Sized which ParameterSet already implements
@@ -42,17 +42,17 @@ impl ParameterSet {
             Self::TestSmall => (2, 2),
         }
     }
-    
+
     /// Get the modulus q for ML-DSA
     pub fn q(&self) -> i32 {
         8380417 // Same for all ML-DSA parameter sets per FIPS 204
     }
-    
+
     /// Get the value of parameter d (number of dropped bits)
     pub fn d(&self) -> usize {
         13 // Same for all parameter sets
     }
-    
+
     /// Get the value of parameter tau (number of ±1's in challenge polynomial)
     pub fn tau(&self) -> usize {
         match self {
@@ -63,7 +63,7 @@ impl ParameterSet {
             Self::TestSmall => 5, // Smaller value for testing
         }
     }
-    
+
     /// Get the value of parameter gamma1 (coefficient range for mask vector)
     pub fn gamma1(&self) -> usize {
         match self {
@@ -74,19 +74,19 @@ impl ParameterSet {
             Self::TestSmall => 1 << 10, // Much smaller for testing
         }
     }
-    
+
     /// Get the value of parameter gamma2 (low-order rounding range)
     /// Defined in FIPS 204 as (q-1)/alpha where alpha=88 for ML-DSA-44 and alpha=32 for ML-DSA-65/87
     pub fn gamma2(&self) -> usize {
         match self {
-            Self::MlDsa44 => 95268, // Exact value: (8380417 - 1) / 88
+            Self::MlDsa44 => 95268,  // Exact value: (8380417 - 1) / 88
             Self::MlDsa65 => 261888, // Exact value: (8380417 - 1) / 32
             Self::MlDsa87 => 261888, // Exact value: (8380417 - 1) / 32
             #[cfg(test)]
             Self::TestSmall => 4190, // Using a much smaller value for testing
         }
     }
-    
+
     /// Get the value of parameter eta (private key range)
     pub fn eta(&self) -> usize {
         match self {
@@ -97,12 +97,12 @@ impl ParameterSet {
             Self::TestSmall => 1, // Minimal for testing
         }
     }
-    
+
     /// Get the value of parameter beta (= tau * eta)
     pub fn beta(&self) -> usize {
         self.tau() * self.eta()
     }
-    
+
     /// Get the value of parameter omega (max number of 1's in the hint)
     pub fn omega(&self) -> usize {
         match self {
@@ -113,7 +113,7 @@ impl ParameterSet {
             Self::TestSmall => 10, // Smaller for testing
         }
     }
-    
+
     /// Get the size of the commitment challenge hash in bytes
     pub fn lambda(&self) -> usize {
         match self {
@@ -124,7 +124,7 @@ impl ParameterSet {
             Self::TestSmall => 64, // Smaller for testing
         }
     }
-    
+
     /// Get the size of the public key in bytes
     pub fn public_key_size(&self) -> usize {
         match self {
@@ -135,7 +135,7 @@ impl ParameterSet {
             Self::TestSmall => 500, // Approximate for testing
         }
     }
-    
+
     /// Get the size of the private key in bytes
     pub fn private_key_size(&self) -> usize {
         match self {
@@ -146,7 +146,7 @@ impl ParameterSet {
             Self::TestSmall => 800, // Approximate for testing
         }
     }
-    
+
     /// Get the size of the signature in bytes
     pub fn signature_size(&self) -> usize {
         match self {
@@ -157,7 +157,7 @@ impl ParameterSet {
             Self::TestSmall => 600, // Approximate for testing
         }
     }
-    
+
     /// Get the security category
     pub fn security_category(&self) -> usize {
         match self {
@@ -168,7 +168,7 @@ impl ParameterSet {
             Self::TestSmall => 1, // Testing only, not secure
         }
     }
-    
+
     /// Get the required RBG security strength in bits
     pub fn required_rbg_strength(&self) -> usize {
         match self {

@@ -1,10 +1,10 @@
 //! ML-DSA Stamp - High-level signing utilities.
-//! 
+//!
 //! This module provides convenient wrappers for ML-DSA signing operations.
 
+use super::sign::{hash_sign, sign};
+use super::{HashFunction, PrivateKey, Signature, SigningMode};
 use crate::error::{Error, Result};
-use super::{PrivateKey, Signature, SigningMode, HashFunction};
-use super::sign::{sign, hash_sign};
 
 /// ML-DSA Stamp for streamlined document signing
 #[derive(Clone, Debug)]
@@ -26,7 +26,7 @@ impl Stamp {
             context: Vec::new(),
         }
     }
-    
+
     /// Create a new Stamp with a specific signing mode
     pub fn with_mode(private_key: PrivateKey, mode: SigningMode) -> Self {
         Self {
@@ -35,7 +35,7 @@ impl Stamp {
             context: Vec::new(),
         }
     }
-    
+
     /// Set a context string for all signatures
     pub fn with_context(mut self, context: &[u8]) -> Result<Self> {
         if context.len() > 255 {
@@ -44,17 +44,27 @@ impl Stamp {
         self.context = context.to_vec();
         Ok(self)
     }
-    
+
     /// Sign a document
     pub fn stamp_document(&self, document: &[u8]) -> Result<Signature> {
         sign(&self.private_key, document, &self.context, self.mode)
     }
-    
+
     /// Sign a document with pre-hashing
-    pub fn stamp_document_with_hash(&self, document: &[u8], hash_function: HashFunction) -> Result<Signature> {
-        hash_sign(&self.private_key, document, &self.context, hash_function, self.mode)
+    pub fn stamp_document_with_hash(
+        &self,
+        document: &[u8],
+        hash_function: HashFunction,
+    ) -> Result<Signature> {
+        hash_sign(
+            &self.private_key,
+            document,
+            &self.context,
+            hash_function,
+            self.mode,
+        )
     }
-    
+
     /// Get the parameter set associated with this stamp
     pub fn parameter_set(&self) -> super::ParameterSet {
         self.private_key.parameter_set()
@@ -65,52 +75,52 @@ impl Stamp {
 mod tests {
     use super::*;
     use crate::dsa::{key_gen, verify, ParameterSet};
-    
+
     #[test]
     fn test_stamp_document() -> Result<()> {
         // Generate a key pair with test parameter set
         let (public_key, private_key) = key_gen(ParameterSet::TestSmall)?;
-        
+
         // Create a stamp
         let stamp = Stamp::new(private_key);
-        
+
         // Test document
         let document = b"TURTL test document";
-        
+
         // Sign the document
         let signature = stamp.stamp_document(document)?;
-        
+
         // Verify the signature
         let is_valid = verify(&public_key, document, &signature, &[])?;
-        
+
         assert!(is_valid);
         Ok(())
     }
-    
+
     #[test]
     fn test_stamp_with_context() -> Result<()> {
         // Generate a key pair with test parameter set
         let (public_key, private_key) = key_gen(ParameterSet::TestSmall)?;
-        
+
         // Create a stamp with context
         let context = b"TURTL context";
         let stamp = Stamp::new(private_key).with_context(context)?;
-        
+
         // Test document
         let document = b"TURTL test document";
-        
+
         // Sign the document
         let signature = stamp.stamp_document(document)?;
-        
+
         // Verify the signature with correct context
         let is_valid = verify(&public_key, document, &signature, context)?;
         assert!(is_valid);
-        
+
         // Verify with wrong context should fail
         let wrong_context = b"wrong context";
         let is_valid = verify(&public_key, document, &signature, wrong_context)?;
         assert!(!is_valid);
-        
+
         Ok(())
     }
 }

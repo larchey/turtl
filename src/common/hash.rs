@@ -1,9 +1,12 @@
 //! Hash function wrappers for ML-KEM and ML-DSA.
-//! 
+//!
 //! This module provides wrappers around SHAKE and SHA3 hash functions
 //! used in both ML-KEM and ML-DSA algorithms.
 
-use sha3::{Shake128, Shake256, Sha3_256, Sha3_512, Digest, digest::{Update, ExtendableOutput, XofReader}};
+use sha3::{
+    digest::{ExtendableOutput, Update, XofReader},
+    Digest, Sha3_256, Sha3_512, Shake128, Shake256,
+};
 
 /// Hash/XOF function type
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -63,10 +66,10 @@ pub fn g_function(input: &[u8]) -> ([u8; 32], [u8; 32]) {
     let output = sha3_512(input);
     let mut a = [0u8; 32];
     let mut b = [0u8; 32];
-    
+
     a.copy_from_slice(&output[0..32]);
     b.copy_from_slice(&output[32..64]);
-    
+
     (a, b)
 }
 
@@ -83,14 +86,16 @@ pub struct SHAKE256Context {
 impl SHAKE256Context {
     /// Initialize a new SHAKE256 context
     pub fn init() -> Self {
-        Self { inner: Shake256::default() }
+        Self {
+            inner: Shake256::default(),
+        }
     }
-    
+
     /// Absorb input data
     pub fn absorb(&mut self, input: &[u8]) {
         self.inner.update(input);
     }
-    
+
     /// Squeeze output bytes
     pub fn squeeze(&mut self, output_len: usize) -> Vec<u8> {
         // Clone the hasher to keep the state intact for future operations
@@ -110,14 +115,16 @@ pub struct SHAKE128Context {
 impl SHAKE128Context {
     /// Initialize a new SHAKE128 context
     pub fn init() -> Self {
-        Self { inner: Shake128::default() }
+        Self {
+            inner: Shake128::default(),
+        }
     }
-    
+
     /// Absorb input data
     pub fn absorb(&mut self, input: &[u8]) {
         self.inner.update(input);
     }
-    
+
     /// Squeeze output bytes
     pub fn squeeze(&mut self, output_len: usize) -> Vec<u8> {
         // Clone the hasher to keep the state intact for future operations
@@ -132,74 +139,74 @@ impl SHAKE128Context {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_shake256() {
         let input = b"TURTL test input";
         let output = shake256(input, 32);
-        
+
         // Output should be 32 bytes
         assert_eq!(output.len(), 32);
-        
+
         // Output should be deterministic
         let output2 = shake256(input, 32);
         assert_eq!(output, output2);
     }
-    
+
     #[test]
     fn test_shake128() {
         let input = b"TURTL test input";
         let output = shake128(input, 16);
-        
+
         // Output should be 16 bytes
         assert_eq!(output.len(), 16);
-        
+
         // Output should be deterministic
         let output2 = shake128(input, 16);
         assert_eq!(output, output2);
     }
-    
+
     #[test]
     fn test_g_function() {
         let input = b"TURTL test input";
         let (a, b) = g_function(input);
-        
+
         // Each output should be 32 bytes
         assert_eq!(a.len(), 32);
         assert_eq!(b.len(), 32);
-        
+
         // Outputs should be different
         assert_ne!(a, b);
     }
-    
+
     #[test]
     fn test_shake256_context() {
         let mut ctx = SHAKE256Context::init();
-        
+
         // Absorb data in multiple chunks
         ctx.absorb(b"TURTL ");
         ctx.absorb(b"test ");
         ctx.absorb(b"input");
-        
+
         // Squeeze output
         let output1 = ctx.squeeze(32);
-        
+
         // Create a new context for comparison
         let mut ctx2 = SHAKE256Context::init();
         ctx2.absorb(b"TURTL test input");
-        
+
         // Get expected output from standard function
         let expected = shake256(b"TURTL test input", 32);
-        
+
         // Compare outputs
         assert_eq!(output1, expected);
-        
+
         // For testing different outputs after multiple squeezes,
         // we need to reset the context and absorb new data
         let mut ctx3 = SHAKE256Context::init();
         ctx3.absorb(b"Different input");
         let output2 = ctx3.squeeze(32);
-        
+
         // These outputs should definitely be different
         assert_ne!(output1, output2);
     }

@@ -1,5 +1,5 @@
 //! Auxiliary functions for ML-KEM.
-//! 
+//!
 //! This module provides helper functions used in the ML-KEM implementation.
 /// Convert between bytes and bits
 pub(crate) fn bytes_to_bits(bytes: &[u8]) -> Vec<u8> {
@@ -12,8 +12,6 @@ pub(crate) fn bytes_to_bits(bytes: &[u8]) -> Vec<u8> {
     bits
 }
 
-
-
 /// Compute the ceiling of log base 2 of an integer
 pub(crate) fn ceil_log2(x: u32) -> u32 {
     if x <= 1 {
@@ -21,4 +19,3 @@ pub(crate) fn ceil_log2(x: u32) -> u32 {
     }
     32 - (x - 1).leading_zeros()
 }
-
