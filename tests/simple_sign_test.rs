@@ -1,9 +1,6 @@
 use turtl::dsa::{self, ParameterSet as DsaParameterSet, SigningMode};
 
-// NOTE: Ignored due to known ML-DSA NTT implementation bug (TODO.md line 10)
-// This test requires signing to work, which depends on the broken NTT implementation.
 #[test]
-#[ignore]
 fn test_simple_sign() {
     // Generate a keypair
     let (public_key, private_key) = dsa::key_gen(DsaParameterSet::MlDsa44).unwrap();

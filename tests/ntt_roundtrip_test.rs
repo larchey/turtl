@@ -60,11 +60,7 @@ fn test_mldsa_ntt_roundtrip() {
     );
 }
 
-// NOTE: Ignored due to known ML-DSA NTT implementation bug (TODO.md line 10)
-// This test detects that NTT produces huge coefficients for small inputs,
-// which is the root cause of signature generation failures.
 #[test]
-#[ignore]
 fn test_mldsa_ntt_preserves_small_values() {
     let ntt_ctx = NTTContext::new(NTTType::MLDSA);
 
