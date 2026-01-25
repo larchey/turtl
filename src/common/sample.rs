@@ -351,7 +351,7 @@ impl RejectionSampler {
 
         // Calculate how many bits needed for each coefficient
         let bits_needed = ((2 * gamma - 1) as f64).log2().ceil() as usize;
-        let bytes_per_coeff = (bits_needed + 7) / 8;
+        let bytes_per_coeff = bits_needed.div_ceil(8);
 
         // Use a static maximum iterations counter instead of recreating for each coefficient
         let max_iterations = 10; // Reduced from 1000 to avoid timeouts
