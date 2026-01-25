@@ -354,7 +354,7 @@ impl NTTContext {
 
                     // Butterfly operations without intermediate modulo reduction
                     polynomial.coeffs[j + len] = polynomial.coeffs[j] - t;
-                    polynomial.coeffs[j] = polynomial.coeffs[j] + t;
+                    polynomial.coeffs[j] += t;
                 }
             }
 
