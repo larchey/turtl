@@ -3,7 +3,7 @@
 //! This module contains benchmarks for key generation, signing, and
 //! verification operations for each ML-DSA parameter set.
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use turtl::dsa::{self, ParameterSet, SigningMode};
 
 /// Benchmark ML-DSA-44 key generation
@@ -223,7 +223,11 @@ fn bench_dsa87_verify(c: &mut Criterion) {
 fn bench_all_parameter_sets(c: &mut Criterion) {
     let mut group = c.benchmark_group("ML-DSA Parameter Sets");
 
-    for param_set in [ParameterSet::MlDsa44, ParameterSet::MlDsa65, ParameterSet::MlDsa87] {
+    for param_set in [
+        ParameterSet::MlDsa44,
+        ParameterSet::MlDsa65,
+        ParameterSet::MlDsa87,
+    ] {
         let name = match param_set {
             ParameterSet::MlDsa44 => "44",
             ParameterSet::MlDsa65 => "65",
@@ -251,9 +255,13 @@ fn bench_all_parameter_sets(c: &mut Criterion) {
             &(&private_key, message, context),
             |b, &(sk, msg, ctx)| {
                 b.iter(|| {
-                    let signature =
-                        dsa::sign(black_box(sk), black_box(msg), black_box(ctx), SigningMode::Hedged)
-                            .unwrap();
+                    let signature = dsa::sign(
+                        black_box(sk),
+                        black_box(msg),
+                        black_box(ctx),
+                        SigningMode::Hedged,
+                    )
+                    .unwrap();
                     black_box(signature)
                 })
             },
@@ -286,8 +294,13 @@ fn bench_all_parameter_sets(c: &mut Criterion) {
             &(&public_key, message, &signature, context),
             |b, &(pk, msg, sig, ctx)| {
                 b.iter(|| {
-                    let is_valid = dsa::verify(black_box(pk), black_box(msg), black_box(sig), black_box(ctx))
-                        .unwrap();
+                    let is_valid = dsa::verify(
+                        black_box(pk),
+                        black_box(msg),
+                        black_box(sig),
+                        black_box(ctx),
+                    )
+                    .unwrap();
                     black_box(is_valid)
                 })
             },
