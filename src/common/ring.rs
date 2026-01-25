@@ -27,6 +27,12 @@ pub struct Montgomery {
     qinv: u32,
 }
 
+impl Default for Montgomery {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Montgomery {
     /// Create a new Montgomery context for ML-KEM/ML-DSA operations
     pub fn new() -> Self {
@@ -185,17 +191,17 @@ mod tests {
         // Test addition
         let c = a.add(&b);
         // Verify that addition result is in [0, modulus-1]
-        assert!(c.value(&context) < context.modulus as u32);
+        assert!(c.value(&context) < context.modulus);
 
         // Test subtraction
         let d = a.sub(&b);
         // Verify that subtraction result is in [0, modulus-1]
-        assert!(d.value(&context) < context.modulus as u32);
+        assert!(d.value(&context) < context.modulus);
 
         // Test multiplication
         let e = a.mul(&b, &context);
         // Verify that multiplication result is in [0, modulus-1]
-        assert!(e.value(&context) < context.modulus as u32);
+        assert!(e.value(&context) < context.modulus);
 
         // Just verify basic arithmetic properties within the ring
         let aval = a.value(&context);

@@ -228,6 +228,7 @@ fn bench_all_parameter_sets(c: &mut Criterion) {
         ParameterSet::MlDsa65,
         ParameterSet::MlDsa87,
     ] {
+        #[allow(unreachable_patterns)]
         let name = match param_set {
             ParameterSet::MlDsa44 => "44",
             ParameterSet::MlDsa65 => "65",

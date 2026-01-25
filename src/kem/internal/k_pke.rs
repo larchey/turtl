@@ -11,6 +11,7 @@ use crate::kem::ParameterSet;
 use super::aux;
 
 /// Generate the key components for K-PKE
+#[allow(clippy::type_complexity)]
 pub(crate) fn generate_key_components(
     rho: &[u8; 32],
     rhoprime: &[u8; 64],
@@ -77,8 +78,8 @@ pub(crate) fn compute_public_t(
 
     // NTT transform s1
     let mut s1_ntt = Vec::with_capacity(k);
-    for i in 0..k {
-        let mut s1_i = s1[i].clone();
+    for s1_item in s1.iter().take(k) {
+        let mut s1_i = s1_item.clone();
         ntt_ctx.forward(&mut s1_i)?;
         s1_ntt.push(s1_i);
     }
@@ -117,16 +118,16 @@ pub(crate) fn power2round(
     let mut t1 = Vec::with_capacity(k);
     let mut t0 = Vec::with_capacity(k);
 
-    for i in 0..k {
+    for t_item in t.iter().take(k) {
         let mut t1_i = Polynomial::new();
         let mut t0_i = Polynomial::new();
 
         for j in 0..256 {
             // Compute t1 = ⌊t/2^d⌋
-            t1_i.coeffs[j] = t[i].coeffs[j] >> d;
+            t1_i.coeffs[j] = t_item.coeffs[j] >> d;
 
             // Compute t0 = t - t1*2^d
-            t0_i.coeffs[j] = t[i].coeffs[j] - (t1_i.coeffs[j] << d);
+            t0_i.coeffs[j] = t_item.coeffs[j] - (t1_i.coeffs[j] << d);
         }
 
         t1.push(t1_i);
@@ -155,8 +156,8 @@ pub(crate) fn encode_public_key(
     public_key.extend_from_slice(rho);
 
     // Add t1
-    for i in 0..k {
-        let encoded = byte_encode(&t1[i], 2_u32.pow(bitlen(8380417 - 1) as u32 - d as u32) - 1)?;
+    for t1_item in t1.iter().take(k) {
+        let encoded = byte_encode(t1_item, 2_u32.pow(bitlen(8380417 - 1) as u32 - d as u32) - 1)?;
         public_key.extend(encoded);
     }
 
@@ -190,20 +191,20 @@ pub(crate) fn encode_private_key(
     private_key.extend_from_slice(tr);
 
     // Add s1
-    for i in 0..k {
-        let encoded = bit_pack(&s1[i], eta1 as i32, eta1 as i32)?;
+    for s1_item in s1.iter().take(k) {
+        let encoded = bit_pack(s1_item, eta1 as i32, eta1 as i32)?;
         private_key.extend(encoded);
     }
 
     // Add s2
-    for i in 0..k {
-        let encoded = bit_pack(&s2[i], eta1 as i32, eta1 as i32)?;
+    for s2_item in s2.iter().take(k) {
+        let encoded = bit_pack(s2_item, eta1 as i32, eta1 as i32)?;
         private_key.extend(encoded);
     }
 
     // Add t0
-    for i in 0..k {
-        let encoded = bit_pack(&t0[i], (1 << (d - 1)) - 1, 1 << (d - 1))?;
+    for t0_item in t0.iter().take(k) {
+        let encoded = bit_pack(t0_item, (1 << (d - 1)) - 1, 1 << (d - 1))?;
         private_key.extend(encoded);
     }
 
@@ -211,6 +212,7 @@ pub(crate) fn encode_private_key(
 }
 
 /// Decode the private key
+#[allow(clippy::type_complexity)]
 pub(crate) fn decode_private_key(
     private_key: &[u8],
     parameter_set: ParameterSet,
@@ -288,8 +290,8 @@ pub(crate) fn encrypt(
 
     // 18. NTT transform y
     let mut y_ntt = Vec::with_capacity(k);
-    for i in 0..k {
-        let mut y_i = y[i].clone();
+    for y_item in y.iter().take(k) {
+        let mut y_i = y_item.clone();
         ntt_ctx.forward(&mut y_i)?;
         y_ntt.push(y_i);
     }
@@ -368,16 +370,16 @@ pub(crate) fn decrypt(
 
     // Transform u' to NTT domain
     let mut u_prime_ntt = Vec::with_capacity(k);
-    for i in 0..k {
-        let mut u_i = u_prime[i].clone();
+    for u_prime_item in u_prime.iter().take(k) {
+        let mut u_i = u_prime_item.clone();
         ntt_ctx.forward(&mut u_i)?;
         u_prime_ntt.push(u_i);
     }
 
     // Transform s to NTT domain
     let mut s_ntt = Vec::with_capacity(k);
-    for i in 0..k {
-        let mut s_i = s[i].clone();
+    for s_item in s.iter().take(k) {
+        let mut s_i = s_item.clone();
         ntt_ctx.forward(&mut s_i)?;
         s_ntt.push(s_i);
     }

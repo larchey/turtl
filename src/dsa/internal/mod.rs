@@ -19,8 +19,8 @@ pub(crate) fn seed_to_keypair(
             // For test parameter set, use a completely deterministic approach
             // Create fixed seeds for each component
             let mut fixed_seed = [0u8; 32];
-            for i in 0..32 {
-                fixed_seed[i] = (i % 256) as u8;
+            for (i, seed_item) in fixed_seed.iter_mut().enumerate() {
+                *seed_item = (i % 256) as u8;
             }
 
             // Call the internal key generation with fixed seed
@@ -32,7 +32,7 @@ pub(crate) fn seed_to_keypair(
             let private_key = PrivateKey::new(private_key_bytes, parameter_set)?;
 
             // Return the key pair
-            return Ok(super::KeyPair::from_keys(public_key, private_key)?);
+            return super::KeyPair::from_keys(public_key, private_key);
         }
     }
 
@@ -128,8 +128,8 @@ pub(crate) fn ml_dsa_sign_internal(
         &s1[0].coeffs[0..10]
     );
 
-    for i in 0..l {
-        let mut s1_i = s1[i].clone();
+    for (i, s1_item) in s1.iter().enumerate().take(l) {
+        let mut s1_i = s1_item.clone();
         ntt_ctx.forward(&mut s1_i)?;
         if i == 0 {
             eprintln!(
@@ -178,8 +178,8 @@ pub(crate) fn ml_dsa_sign_internal(
 
         // For w = Ay, we need y in [0, q-1] representation for NTT
         let mut y_reduced = y.clone();
-        for i in 0..l {
-            y_reduced[i].reduce_modulo(ntt_ctx.modulus);
+        for y_item in y_reduced.iter_mut().take(l) {
+            y_item.reduce_modulo(ntt_ctx.modulus);
         }
 
         // Compute w = Ay using reduced y
@@ -189,8 +189,8 @@ pub(crate) fn ml_dsa_sign_internal(
         let mut w1 = Vec::with_capacity(k);
         let mut w0 = Vec::with_capacity(k);
 
-        for i in 0..k {
-            let (w1_i, w0_i) = decompose(&w[i], gamma2)?;
+        for w_item in w.iter().take(k) {
+            let (w1_i, w0_i) = decompose(w_item, gamma2)?;
             w1.push(w1_i);
             w0.push(w0_i);
         }
@@ -256,8 +256,8 @@ pub(crate) fn ml_dsa_sign_internal(
         // Check if z is small enough (using centered norm)
         let mut z_ok = true;
         let mut max_z_norm = 0;
-        for i in 0..l {
-            let norm = z[i].infinity_norm_centered(ntt_ctx.modulus);
+        for z_item in z.iter().take(l) {
+            let norm = z_item.infinity_norm_centered(ntt_ctx.modulus);
             if norm > max_z_norm {
                 max_z_norm = norm;
             }
@@ -305,8 +305,8 @@ pub(crate) fn ml_dsa_sign_internal(
 
         // Check if r0 is small enough (using centered norm)
         let mut r0_ok = true;
-        for i in 0..k {
-            if r0[i].infinity_norm_centered(ntt_ctx.modulus) >= (gamma2 - beta) as i32 {
+        for r0_item in r0.iter().take(k) {
+            if r0_item.infinity_norm_centered(ntt_ctx.modulus) >= (gamma2 - beta) as i32 {
                 r0_ok = false;
                 break;
             }
@@ -320,8 +320,8 @@ pub(crate) fn ml_dsa_sign_internal(
 
         // Compute ct0
         let mut ct0 = Vec::with_capacity(k);
-        for i in 0..k {
-            let mut ct0_i = ntt_ctx.multiply_ntt(&c_hat, &t0_hat[i])?;
+        for t0_hat_item in t0_hat.iter().take(k) {
+            let mut ct0_i = ntt_ctx.multiply_ntt(&c_hat, t0_hat_item)?;
             ntt_ctx.inverse(&mut ct0_i)?;
             ct0.push(ct0_i);
         }
@@ -351,8 +351,8 @@ pub(crate) fn ml_dsa_sign_internal(
 
         // Convert z to centered representation for encoding
         let mut z_centered = z.clone();
-        for i in 0..l {
-            z_centered[i].to_centered_representation(ntt_ctx.modulus);
+        for z_item in z_centered.iter_mut().take(l) {
+            z_item.to_centered_representation(ntt_ctx.modulus);
         }
 
         // Encode the signature
@@ -395,8 +395,8 @@ pub(crate) fn ml_dsa_verify_internal(
 
     // Check if z is small enough using explicit bounds checking
     use crate::security::fault_detection;
-    for i in 0..l {
-        let norm = z[i].infinity_norm();
+    for z_item in z.iter().take(l) {
+        let norm = z_item.infinity_norm();
 
         // Verify bounds for z values
         fault_detection::verify_bounds(norm as usize, 0, gamma1 - beta - 1)
@@ -441,8 +441,8 @@ pub(crate) fn ml_dsa_verify_internal(
 
     // Compute c*t1*2^d
     let mut ct1 = Vec::with_capacity(k);
-    for i in 0..k {
-        let mut t1_hat = t1[i].clone();
+    for t1_item in t1.iter().take(k) {
+        let mut t1_hat = t1_item.clone();
         ntt_ctx.forward(&mut t1_hat)?;
 
         let mut ct1_i = ntt_ctx.multiply_ntt(&c_hat, &t1_hat)?;
@@ -748,8 +748,8 @@ fn compute_public_t(
 
     // NTT transform s1
     let mut s1_hat = Vec::with_capacity(l);
-    for i in 0..l {
-        let mut s1_i_hat = s1[i].clone();
+    for s1_item in s1.iter().take(l) {
+        let mut s1_i_hat = s1_item.clone();
         ntt_ctx.forward(&mut s1_i_hat)?;
         s1_hat.push(s1_i_hat);
     }
@@ -785,16 +785,16 @@ fn power2round(t: &[Polynomial], d: usize) -> Result<(Vec<Polynomial>, Vec<Polyn
     let mut t1 = Vec::with_capacity(k);
     let mut t0 = Vec::with_capacity(k);
 
-    for i in 0..k {
+    for t_item in t.iter().take(k) {
         let mut t1_i = Polynomial::new();
         let mut t0_i = Polynomial::new();
 
         for j in 0..256 {
             // Compute t1 = ⌊t/2^d⌋
-            t1_i.coeffs[j] = t[i].coeffs[j] >> d;
+            t1_i.coeffs[j] = t_item.coeffs[j] >> d;
 
             // Compute t0 = t - t1*2^d
-            t0_i.coeffs[j] = t[i].coeffs[j] - (t1_i.coeffs[j] << d);
+            t0_i.coeffs[j] = t_item.coeffs[j] - (t1_i.coeffs[j] << d);
         }
 
         t1.push(t1_i);
@@ -888,8 +888,8 @@ fn sample_uniform_poly(seed: &[u8], gamma1: usize) -> Result<Polynomial> {
 
             // Convert bytes to an integer (little-endian)
             let mut val = 0i32;
-            for j in 0..bytes_per_coeff {
-                val |= (bytes[j] as i32) << (8 * j);
+            for (j, byte_item) in bytes.iter().enumerate().take(bytes_per_coeff) {
+                val |= (*byte_item as i32) << (8 * j);
             }
 
             // Mask out unused bits
@@ -921,8 +921,8 @@ fn compute_w(
 
     // NTT transform z
     let mut z_hat = Vec::with_capacity(l);
-    for i in 0..l {
-        let mut z_i_hat = z[i].clone();
+    for z_item in z.iter().take(l) {
+        let mut z_i_hat = z_item.clone();
         ntt_ctx.forward(&mut z_i_hat)?;
         z_hat.push(z_i_hat);
     }
@@ -930,12 +930,12 @@ fn compute_w(
     // Compute w = Az
     let mut w = Vec::with_capacity(k);
 
-    for i in 0..k {
+    for matrix_a_item in matrix_a.iter().take(k) {
         let mut w_i = Polynomial::new();
 
         // Compute A[i] * z
         for j in 0..l {
-            let prod = ntt_ctx.multiply_ntt(&matrix_a[i][j], &z_hat[j])?;
+            let prod = ntt_ctx.multiply_ntt(&matrix_a_item[j], &z_hat[j])?;
             w_i.add_assign(&prod, ntt_ctx.modulus);
         }
 
@@ -1113,13 +1113,13 @@ fn encode_w1(w1: &[Polynomial]) -> Result<Vec<u8>> {
     let bytes_per_poly = (256usize * bits_per_coeff).div_ceil(8);
     let mut result = Vec::with_capacity(k * bytes_per_poly);
 
-    for i in 0..k {
+    for w1_item in w1.iter().take(k) {
         // Convert polynomial coefficients to bits
         let mut bits = Vec::with_capacity(256 * bits_per_coeff);
 
         for j in 0..256 {
             // Get the coefficient as a non-negative value
-            let coeff_raw = w1[i].coeffs[j];
+            let coeff_raw = w1_item.coeffs[j];
 
             // Handle negative values
             #[cfg(test)]
@@ -1197,9 +1197,9 @@ fn encode_hint(h: &[Polynomial], omega: usize) -> Result<Vec<u8>> {
 
     // First, gather all positions where coefficients are 1
     let mut positions = Vec::new();
-    for i in 0..k {
+    for (i, h_item) in h.iter().enumerate().take(k) {
         for j in 0..256 {
-            if h[i].coeffs[j] == 1 {
+            if h_item.coeffs[j] == 1 {
                 positions.push((i, j));
             }
         }
@@ -1309,8 +1309,8 @@ fn encode_public_key(
     public_key.extend_from_slice(rho);
 
     // Encode t1
-    for i in 0..k {
-        let encoded = encode_poly(&t1[i], bits_per_coeff, max_value as u32)?;
+    for t1_item in t1.iter().take(k) {
+        let encoded = encode_poly(t1_item, bits_per_coeff, max_value as u32)?;
         public_key.extend_from_slice(&encoded);
     }
 
@@ -1365,20 +1365,20 @@ fn encode_private_key(
     private_key.extend_from_slice(tr);
 
     // Encode s1
-    for i in 0..l {
-        let encoded = encode_poly_signed(&s1[i], eta, eta)?;
+    for s1_item in s1.iter().take(l) {
+        let encoded = encode_poly_signed(s1_item, eta, eta)?;
         private_key.extend_from_slice(&encoded);
     }
 
     // Encode s2
-    for i in 0..k {
-        let encoded = encode_poly_signed(&s2[i], eta, eta)?;
+    for s2_item in s2.iter().take(k) {
+        let encoded = encode_poly_signed(s2_item, eta, eta)?;
         private_key.extend_from_slice(&encoded);
     }
 
     // Encode t0
-    for i in 0..k {
-        let encoded = encode_poly(&t0[i], t0_bits_per_coeff, t0_max_value)?;
+    for t0_item in t0.iter().take(k) {
+        let encoded = encode_poly(t0_item, t0_bits_per_coeff, t0_max_value)?;
         private_key.extend_from_slice(&encoded);
     }
 
@@ -1438,6 +1438,7 @@ fn decode_public_key(
 }
 
 /// Decode the private key
+#[allow(clippy::type_complexity)]
 fn decode_private_key(
     private_key_bytes: &[u8],
     parameter_set: ParameterSet,
@@ -1647,8 +1648,8 @@ fn decode_hint(bytes: &[u8], k: usize, omega: usize) -> Result<Vec<Polynomial>> 
     }
 
     // Ensure remaining positions are 0
-    for i in pos_idx..omega {
-        if positions[i] != 0 {
+    for pos_item in positions.iter().take(omega).skip(pos_idx) {
+        if *pos_item != 0 {
             return Err(Error::InvalidSignature);
         }
     }
@@ -1870,8 +1871,8 @@ fn encode_signature(
     signature.extend_from_slice(c_tilde);
 
     // Encode z
-    for i in 0..l {
-        let encoded = encode_poly_signed(&z[i], gamma1 - 1, gamma1 - 1)?;
+    for z_item in z.iter().take(l) {
+        let encoded = encode_poly_signed(z_item, gamma1 - 1, gamma1 - 1)?;
         signature.extend_from_slice(&encoded);
     }
 

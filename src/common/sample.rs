@@ -49,13 +49,13 @@ impl SampleInBall {
             let mut positions = Vec::with_capacity(self.tau);
             for i in 0..self.tau {
                 // Create a deterministic position based on seed hash
-                let pos = ((hash_bytes[i % hash_bytes.len()] as usize + i * 7) % 256) as usize;
+                let pos = (hash_bytes[i % hash_bytes.len()] as usize + i * 7) % 256;
                 positions.push(pos);
             }
 
             // Set the selected positions to +/-1 (alternating)
-            for i in 0..self.tau {
-                let pos = positions[i];
+            for (i, pos_item) in positions.iter().enumerate().take(self.tau) {
+                let pos = *pos_item;
                 poly.coeffs[pos] = if i % 2 == 0 { 1 } else { -1 };
             }
 
@@ -366,8 +366,8 @@ impl RejectionSampler {
 
                 // Convert bytes to an integer (little-endian)
                 let mut val = 0i32;
-                for j in 0..bytes_per_coeff {
-                    val |= (bytes[j] as i32) << (8 * j);
+                for (j, byte_item) in bytes.iter().enumerate().take(bytes_per_coeff) {
+                    val |= (*byte_item as i32) << (8 * j);
                 }
 
                 // Mask out unused bits

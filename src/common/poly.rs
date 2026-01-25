@@ -25,6 +25,12 @@ impl Zeroize for Polynomial {
 // Manual implementation of ZeroizeOnDrop
 impl ZeroizeOnDrop for Polynomial {}
 
+impl Default for Polynomial {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Polynomial {
     /// Create a new zero polynomial
     pub fn new() -> Self {

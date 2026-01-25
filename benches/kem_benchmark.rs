@@ -132,6 +132,7 @@ fn bench_all_parameter_sets(c: &mut Criterion) {
         ParameterSet::MlKem768,
         ParameterSet::MlKem1024,
     ] {
+        #[allow(unreachable_patterns)]
         let name = match param_set {
             ParameterSet::MlKem512 => "512",
             ParameterSet::MlKem768 => "768",
