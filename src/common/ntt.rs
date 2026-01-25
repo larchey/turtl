@@ -150,7 +150,7 @@ impl NTTContext {
             NTTType::MLDSA => {
                 // 32-bit Montgomery reduction for ML-DSA
                 let mut t = ((a as u32) as u64 * self.qinv as u64) as u32;
-                t = ((a as i64 - (t as i64 * self.modulus as i64)) >> 32) as u32;
+                t = ((a - (t as i64 * self.modulus as i64)) >> 32) as u32;
                 t as i32
             }
         }
@@ -249,7 +249,7 @@ impl NTTContext {
                 }
 
                 let mut t = ((a as u32) as u64 * self.qinv as u64) as u32;
-                t = ((a as i64 - (t as i64 * self.modulus as i64)) >> 32) as u32;
+                t = ((a - (t as i64 * self.modulus as i64)) >> 32) as u32;
                 let result = t as i32;
 
                 // Verify result is in range [0, q-1]
@@ -351,7 +351,7 @@ impl NTTContext {
                     polynomial.coeffs[j + len] =
                         polynomial.coeffs[j + len].rem_euclid(self.modulus);
 
-                    polynomial.coeffs[j] = polynomial.coeffs[j] + t;
+                    polynomial.coeffs[j] += t;
                     polynomial.coeffs[j] = polynomial.coeffs[j].rem_euclid(self.modulus);
                 }
             }

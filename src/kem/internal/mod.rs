@@ -23,7 +23,7 @@ pub(crate) fn seed_to_keypair(
     let private_key = PrivateKey::new(private_key_bytes, parameter_set)?;
 
     // Return the key pair
-    Ok(super::KeyPair::from_keys(public_key, private_key)?)
+    super::KeyPair::from_keys(public_key, private_key)
 }
 
 /// Internal function for ML-KEM key generation

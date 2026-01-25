@@ -458,7 +458,7 @@ fn sample_cbd(seed: &[u8], eta: usize) -> Result<Polynomial> {
     ctx.absorb(seed);
 
     // We need 256 coefficients, each requiring 2*eta bits
-    let required_bytes = (256 * 2 * eta + 7) / 8;
+    let required_bytes = (256 * 2 * eta).div_ceil(8);
     let expanded_seed = ctx.squeeze(required_bytes);
 
     // Convert to bits
@@ -603,7 +603,7 @@ fn byte_encode(poly: &Polynomial, bound: u32) -> Result<Vec<u8>> {
     let bits_per_coeff = aux::ceil_log2(bound + 1);
 
     // Calculate the size of the resulting byte array
-    let bytes_needed = (256 * bits_per_coeff as usize + 7) / 8;
+    let bytes_needed = (256 * bits_per_coeff as usize).div_ceil(8);
     let mut result = vec![0u8; bytes_needed];
 
     // Convert polynomial coefficients to bits
@@ -645,7 +645,7 @@ fn byte_decode(bytes: &[u8], bound: u32) -> Result<Polynomial> {
     let bits_per_coeff = aux::ceil_log2(bound + 1);
 
     // Calculate the number of bytes needed
-    let bytes_needed = (256 * bits_per_coeff as usize + 7) / 8;
+    let bytes_needed = (256 * bits_per_coeff as usize).div_ceil(8);
 
     if bytes.len() < bytes_needed {
         return Err(Error::EncodingError(format!(
@@ -707,9 +707,9 @@ fn byte_decode_vector(bytes: &[u8], bound: usize) -> Result<Vec<Polynomial>> {
     let bits_per_coeff = aux::ceil_log2(bound as u32 + 1);
 
     // Calculate the number of bytes needed per polynomial
-    let bytes_per_poly = (256 * bits_per_coeff as usize + 7) / 8;
+    let bytes_per_poly = (256 * bits_per_coeff as usize).div_ceil(8);
 
-    if bytes.len() % bytes_per_poly != 0 {
+    if !bytes.len().is_multiple_of(bytes_per_poly) {
         return Err(Error::EncodingError("Invalid input length".to_string()));
     }
 
@@ -779,7 +779,7 @@ fn bit_pack(poly: &Polynomial, a: i32, b: i32) -> Result<Vec<u8>> {
     let bits_per_coeff = aux::ceil_log2(total_range);
 
     // Calculate the size of the resulting byte array
-    let bytes_needed = (256 * bits_per_coeff as usize + 7) / 8;
+    let bytes_needed = (256 * bits_per_coeff as usize).div_ceil(8);
     let mut result = vec![0u8; bytes_needed];
 
     // Convert coefficients to unsigned range [0, a+b]
@@ -825,7 +825,7 @@ fn bit_unpack(bytes: &[u8], a: i32, b: i32) -> Result<Polynomial> {
     let bits_per_coeff = aux::ceil_log2(total_range);
 
     // Calculate the number of bytes needed
-    let bytes_needed = (256 * bits_per_coeff as usize + 7) / 8;
+    let bytes_needed = (256 * bits_per_coeff as usize).div_ceil(8);
 
     if bytes.len() < bytes_needed {
         return Err(Error::EncodingError(format!(

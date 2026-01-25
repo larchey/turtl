@@ -163,7 +163,7 @@ impl ParameterSet {
 
         // Check k parameter
         let k = self.k();
-        if k < 2 || k > 4 {
+        if !(2..=4).contains(&k) {
             return Err("Invalid k parameter (must be 2, 3, or 4)");
         }
 
