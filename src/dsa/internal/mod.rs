@@ -1110,7 +1110,7 @@ fn encode_w1(w1: &[Polynomial]) -> Result<Vec<u8>> {
     let bits_per_coeff = 6;
 
     // Calculate number of bytes needed per polynomial
-    let bytes_per_poly = (256 * bits_per_coeff).div_ceil(8);
+    let bytes_per_poly = (256usize * bits_per_coeff).div_ceil(8);
     let mut result = Vec::with_capacity(k * bytes_per_poly);
 
     for i in 0..k {
@@ -1289,7 +1289,7 @@ fn encode_public_key(
     // Calculate t1 size - coefficients are in [0, (q-1)/2^d]
     let max_value = (8380417 - 1) >> d;
     let bits_per_coeff = bitlen(max_value as u32);
-    let _t1_size = k * (256 * bits_per_coeff).div_ceil(8);
+    let _t1_size = k * (256usize * bits_per_coeff).div_ceil(8);
 
     #[cfg(test)]
     let public_key_size = match parameter_set {
@@ -1402,7 +1402,7 @@ fn decode_public_key(
     // Extract t1
     let max_value = (8380417 - 1) >> d;
     let bits_per_coeff = bitlen(max_value as u32);
-    let bytes_per_poly = (256 * bits_per_coeff).div_ceil(8);
+    let bytes_per_poly = (256usize * bits_per_coeff).div_ceil(8);
 
     // Check if we have enough bytes for the t1 polynomials
     if public_key_bytes.len() < 32 + k * bytes_per_poly {
