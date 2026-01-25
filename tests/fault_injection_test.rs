@@ -9,10 +9,7 @@
 //! such corruptions.
 
 use turtl::error::Error;
-use turtl::security::fault_detection::{
-    ct_eq, verify_bounds,
-    verify_signature_checks,
-};
+use turtl::security::fault_detection::{ct_eq, verify_bounds, verify_signature_checks};
 // KEM imports disabled pending investigation
 // use turtl::kem::{self, ParameterSet};
 

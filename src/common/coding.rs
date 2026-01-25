@@ -20,7 +20,7 @@ pub fn bytes_to_bits(bytes: &[u8]) -> Vec<u8> {
 
 /// Convert a bit array to a byte array
 pub fn bits_to_bytes(bits: &[u8]) -> Vec<u8> {
-    let num_bytes = (bits.len() + 7) / 8;
+    let num_bytes = bits.len().div_ceil(8);
     let mut bytes = vec![0u8; num_bytes];
 
     for (i, &bit) in bits.iter().enumerate() {
