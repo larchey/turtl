@@ -157,7 +157,10 @@ pub(crate) fn encode_public_key(
 
     // Add t1
     for t1_item in t1.iter().take(k) {
-        let encoded = byte_encode(t1_item, 2_u32.pow(bitlen(8380417 - 1) as u32 - d as u32) - 1)?;
+        let encoded = byte_encode(
+            t1_item,
+            2_u32.pow(bitlen(8380417 - 1) as u32 - d as u32) - 1,
+        )?;
         public_key.extend(encoded);
     }
 
