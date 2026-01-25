@@ -45,7 +45,7 @@ pub(crate) fn seed_to_keypair(
     let private_key = PrivateKey::new(private_key_bytes, parameter_set)?;
 
     // Return the key pair
-    Ok(super::KeyPair::from_keys(public_key, private_key)?)
+    super::KeyPair::from_keys(public_key, private_key)
 }
 
 /// Implement ML-DSA key generation from seed
@@ -128,8 +128,8 @@ pub(crate) fn ml_dsa_sign_internal(
         &s1[0].coeffs[0..10]
     );
 
-    for i in 0..l {
-        let mut s1_i = s1[i].clone();
+    for (i, s1_elem) in s1.iter().enumerate().take(l) {
+        let mut s1_i = s1_elem.clone();
         ntt_ctx.forward(&mut s1_i)?;
         if i == 0 {
             eprintln!(
@@ -178,9 +178,9 @@ pub(crate) fn ml_dsa_sign_internal(
 
         // For w = Ay, we need y in [0, q-1] representation for NTT
         let mut y_reduced = y.clone();
-        for i in 0..l {
-            y_reduced[i].reduce_modulo(ntt_ctx.modulus);
-        }
+        y_reduced.iter_mut().take(l).for_each(|y_elem| {
+            y_elem.reduce_modulo(ntt_ctx.modulus);
+        });
 
         // Compute w = Ay using reduced y
         let w = compute_w(&matrix_a, &y_reduced, &ntt_ctx)?;
@@ -189,8 +189,8 @@ pub(crate) fn ml_dsa_sign_internal(
         let mut w1 = Vec::with_capacity(k);
         let mut w0 = Vec::with_capacity(k);
 
-        for i in 0..k {
-            let (w1_i, w0_i) = decompose(&w[i], gamma2)?;
+        for w_elem in w.iter().take(k) {
+            let (w1_i, w0_i) = decompose(w_elem, gamma2)?;
             w1.push(w1_i);
             w0.push(w0_i);
         }
@@ -256,8 +256,8 @@ pub(crate) fn ml_dsa_sign_internal(
         // Check if z is small enough (using centered norm)
         let mut z_ok = true;
         let mut max_z_norm = 0;
-        for i in 0..l {
-            let norm = z[i].infinity_norm_centered(ntt_ctx.modulus);
+        for z_elem in z.iter().take(l) {
+            let norm = z_elem.infinity_norm_centered(ntt_ctx.modulus);
             if norm > max_z_norm {
                 max_z_norm = norm;
             }
@@ -305,8 +305,8 @@ pub(crate) fn ml_dsa_sign_internal(
 
         // Check if r0 is small enough (using centered norm)
         let mut r0_ok = true;
-        for i in 0..k {
-            if r0[i].infinity_norm_centered(ntt_ctx.modulus) >= (gamma2 - beta) as i32 {
+        for r0_elem in r0.iter().take(k) {
+            if r0_elem.infinity_norm_centered(ntt_ctx.modulus) >= (gamma2 - beta) as i32 {
                 r0_ok = false;
                 break;
             }
@@ -320,8 +320,8 @@ pub(crate) fn ml_dsa_sign_internal(
 
         // Compute ct0
         let mut ct0 = Vec::with_capacity(k);
-        for i in 0..k {
-            let mut ct0_i = ntt_ctx.multiply_ntt(&c_hat, &t0_hat[i])?;
+        for t0_hat_elem in t0_hat.iter().take(k) {
+            let mut ct0_i = ntt_ctx.multiply_ntt(&c_hat, t0_hat_elem)?;
             ntt_ctx.inverse(&mut ct0_i)?;
             ct0.push(ct0_i);
         }
@@ -351,9 +351,9 @@ pub(crate) fn ml_dsa_sign_internal(
 
         // Convert z to centered representation for encoding
         let mut z_centered = z.clone();
-        for i in 0..l {
-            z_centered[i].to_centered_representation(ntt_ctx.modulus);
-        }
+        z_centered.iter_mut().take(l).for_each(|z_elem| {
+            z_elem.to_centered_representation(ntt_ctx.modulus);
+        });
 
         // Encode the signature
         return encode_signature(&c_tilde, &z_centered, &h, parameter_set);
@@ -395,8 +395,8 @@ pub(crate) fn ml_dsa_verify_internal(
 
     // Check if z is small enough using explicit bounds checking
     use crate::security::fault_detection;
-    for i in 0..l {
-        let norm = z[i].infinity_norm();
+    for z_elem in z.iter().take(l) {
+        let norm = z_elem.infinity_norm();
 
         // Verify bounds for z values
         fault_detection::verify_bounds(norm as usize, 0, gamma1 - beta - 1)
@@ -441,8 +441,8 @@ pub(crate) fn ml_dsa_verify_internal(
 
     // Compute c*t1*2^d
     let mut ct1 = Vec::with_capacity(k);
-    for i in 0..k {
-        let mut t1_hat = t1[i].clone();
+    for t1_elem in t1.iter().take(k) {
+        let mut t1_hat = t1_elem.clone();
         ntt_ctx.forward(&mut t1_hat)?;
 
         let mut ct1_i = ntt_ctx.multiply_ntt(&c_hat, &t1_hat)?;
@@ -748,8 +748,8 @@ fn compute_public_t(
 
     // NTT transform s1
     let mut s1_hat = Vec::with_capacity(l);
-    for i in 0..l {
-        let mut s1_i_hat = s1[i].clone();
+    for s1_elem in s1.iter().take(l) {
+        let mut s1_i_hat = s1_elem.clone();
         ntt_ctx.forward(&mut s1_i_hat)?;
         s1_hat.push(s1_i_hat);
     }
@@ -785,16 +785,16 @@ fn power2round(t: &[Polynomial], d: usize) -> Result<(Vec<Polynomial>, Vec<Polyn
     let mut t1 = Vec::with_capacity(k);
     let mut t0 = Vec::with_capacity(k);
 
-    for i in 0..k {
+    for t_elem in t.iter().take(k) {
         let mut t1_i = Polynomial::new();
         let mut t0_i = Polynomial::new();
 
         for j in 0..256 {
             // Compute t1 = ⌊t/2^d⌋
-            t1_i.coeffs[j] = t[i].coeffs[j] >> d;
+            t1_i.coeffs[j] = t_elem.coeffs[j] >> d;
 
             // Compute t0 = t - t1*2^d
-            t0_i.coeffs[j] = t[i].coeffs[j] - (t1_i.coeffs[j] << d);
+            t0_i.coeffs[j] = t_elem.coeffs[j] - (t1_i.coeffs[j] << d);
         }
 
         t1.push(t1_i);
@@ -878,7 +878,7 @@ fn sample_uniform_poly(seed: &[u8], gamma1: usize) -> Result<Polynomial> {
 
     // Calculate how many bits needed per coefficient
     let bits_needed = bitlen((2 * gamma1 - 2) as u32);
-    let bytes_per_coeff = (bits_needed + 7) / 8;
+    let bytes_per_coeff = bits_needed.div_ceil(8);
 
     for i in 0..256 {
         let mut valid_coeff = false;
@@ -888,8 +888,8 @@ fn sample_uniform_poly(seed: &[u8], gamma1: usize) -> Result<Polynomial> {
 
             // Convert bytes to an integer (little-endian)
             let mut val = 0i32;
-            for j in 0..bytes_per_coeff {
-                val |= (bytes[j] as i32) << (8 * j);
+            for (j, &byte) in bytes.iter().enumerate().take(bytes_per_coeff) {
+                val |= (byte as i32) << (8 * j);
             }
 
             // Mask out unused bits
@@ -921,8 +921,8 @@ fn compute_w(
 
     // NTT transform z
     let mut z_hat = Vec::with_capacity(l);
-    for i in 0..l {
-        let mut z_i_hat = z[i].clone();
+    for z_elem in z.iter().take(l) {
+        let mut z_i_hat = z_elem.clone();
         ntt_ctx.forward(&mut z_i_hat)?;
         z_hat.push(z_i_hat);
     }
@@ -930,12 +930,12 @@ fn compute_w(
     // Compute w = Az
     let mut w = Vec::with_capacity(k);
 
-    for i in 0..k {
+    for matrix_row in matrix_a.iter().take(k) {
         let mut w_i = Polynomial::new();
 
         // Compute A[i] * z
         for j in 0..l {
-            let prod = ntt_ctx.multiply_ntt(&matrix_a[i][j], &z_hat[j])?;
+            let prod = ntt_ctx.multiply_ntt(&matrix_row[j], &z_hat[j])?;
             w_i.add_assign(&prod, ntt_ctx.modulus);
         }
 
@@ -974,7 +974,7 @@ fn decompose_coefficient(r: i32, alpha: usize) -> (i32, i32) {
     // Validate alpha is within a reasonable range to prevent errors
     // ML-DSA specifies alpha is either 88 (for ML-DSA-44) or 32 (for ML-DSA-65/87)
     // This should be checked at a higher level, but we add a defensive check here
-    let _ = fault_detection::verify_bounds(alpha, 1, 1000000).expect("Alpha value is out of range");
+    fault_detection::verify_bounds(alpha, 1, 1000000).expect("Alpha value is out of range");
 
     // Compute 2*alpha safely, checking for overflow
     let two_alpha = match (alpha as i32).checked_mul(2) {
@@ -1110,16 +1110,16 @@ fn encode_w1(w1: &[Polynomial]) -> Result<Vec<u8>> {
     let bits_per_coeff = 6;
 
     // Calculate number of bytes needed per polynomial
-    let bytes_per_poly = (256 * bits_per_coeff + 7) / 8;
+    let bytes_per_poly = (256_usize * bits_per_coeff).div_ceil(8);
     let mut result = Vec::with_capacity(k * bytes_per_poly);
 
-    for i in 0..k {
+    for w1_elem in w1.iter().take(k) {
         // Convert polynomial coefficients to bits
         let mut bits = Vec::with_capacity(256 * bits_per_coeff);
 
         for j in 0..256 {
             // Get the coefficient as a non-negative value
-            let coeff_raw = w1[i].coeffs[j];
+            let coeff_raw = w1_elem.coeffs[j];
 
             // Handle negative values
             #[cfg(test)]
@@ -1135,7 +1135,7 @@ fn encode_w1(w1: &[Polynomial]) -> Result<Vec<u8>> {
 
             #[cfg(not(test))]
             // Handle negative values by using absolute value
-            let coeff = coeff_raw.unsigned_abs() as u32;
+            let coeff = coeff_raw.unsigned_abs();
 
             // We need to ensure the coefficient is within the expected range
             #[cfg(test)]
@@ -1176,7 +1176,7 @@ fn encode_w1(w1: &[Polynomial]) -> Result<Vec<u8>> {
         }
 
         // Pack bits into bytes
-        for b in 0..(bits.len() + 7) / 8 {
+        for b in 0..bits.len().div_ceil(8) {
             let mut byte = 0u8;
             for j in 0..8 {
                 if b * 8 + j < bits.len() {
@@ -1197,9 +1197,9 @@ fn encode_hint(h: &[Polynomial], omega: usize) -> Result<Vec<u8>> {
 
     // First, gather all positions where coefficients are 1
     let mut positions = Vec::new();
-    for i in 0..k {
+    for (i, h_elem) in h.iter().enumerate().take(k) {
         for j in 0..256 {
-            if h[i].coeffs[j] == 1 {
+            if h_elem.coeffs[j] == 1 {
                 positions.push((i, j));
             }
         }
@@ -1289,7 +1289,7 @@ fn encode_public_key(
     // Calculate t1 size - coefficients are in [0, (q-1)/2^d]
     let max_value = (8380417 - 1) >> d;
     let bits_per_coeff = bitlen(max_value as u32);
-    let _t1_size = k * ((256 * bits_per_coeff + 7) / 8);
+    let _t1_size = k * (256 * bits_per_coeff).div_ceil(8);
 
     #[cfg(test)]
     let public_key_size = match parameter_set {
@@ -1309,8 +1309,8 @@ fn encode_public_key(
     public_key.extend_from_slice(rho);
 
     // Encode t1
-    for i in 0..k {
-        let encoded = encode_poly(&t1[i], bits_per_coeff, max_value as u32)?;
+    for t1_elem in t1.iter().take(k) {
+        let encoded = encode_poly(t1_elem, bits_per_coeff, max_value as u32)?;
         public_key.extend_from_slice(&encoded);
     }
 
@@ -1365,20 +1365,20 @@ fn encode_private_key(
     private_key.extend_from_slice(tr);
 
     // Encode s1
-    for i in 0..l {
-        let encoded = encode_poly_signed(&s1[i], eta, eta)?;
+    for s1_elem in s1.iter().take(l) {
+        let encoded = encode_poly_signed(s1_elem, eta, eta)?;
         private_key.extend_from_slice(&encoded);
     }
 
     // Encode s2
-    for i in 0..k {
-        let encoded = encode_poly_signed(&s2[i], eta, eta)?;
+    for s2_elem in s2.iter().take(k) {
+        let encoded = encode_poly_signed(s2_elem, eta, eta)?;
         private_key.extend_from_slice(&encoded);
     }
 
     // Encode t0
-    for i in 0..k {
-        let encoded = encode_poly(&t0[i], t0_bits_per_coeff, t0_max_value)?;
+    for t0_elem in t0.iter().take(k) {
+        let encoded = encode_poly(t0_elem, t0_bits_per_coeff, t0_max_value)?;
         private_key.extend_from_slice(&encoded);
     }
 
@@ -1402,7 +1402,7 @@ fn decode_public_key(
     // Extract t1
     let max_value = (8380417 - 1) >> d;
     let bits_per_coeff = bitlen(max_value as u32);
-    let bytes_per_poly = (256 * bits_per_coeff + 7) / 8;
+    let bytes_per_poly = (256 * bits_per_coeff).div_ceil(8);
 
     // Check if we have enough bytes for the t1 polynomials
     if public_key_bytes.len() < 32 + k * bytes_per_poly {
@@ -1465,11 +1465,11 @@ fn decode_private_key(
     // Calculate sizes
     let s_max_value = eta as u32;
     let _s_bits_per_coeff = bitlen(2 * s_max_value);
-    let s_bytes_per_poly = (256 * _s_bits_per_coeff + 7) / 8;
+    let s_bytes_per_poly = (256 * _s_bits_per_coeff).div_ceil(8);
 
     let t0_max_value = (1 << d) - 1;
     let t0_bits_per_coeff = bitlen(t0_max_value);
-    let t0_bytes_per_poly = (256 * t0_bits_per_coeff + 7) / 8;
+    let t0_bytes_per_poly = (256 * t0_bits_per_coeff).div_ceil(8);
 
     // Check if private key has enough bytes
     let required_size = 128 + // rho + key + tr
@@ -1561,7 +1561,7 @@ fn decode_signature(
     // Extract z
     let z_max_value = gamma1 as u32 - 1;
     let z_bits_per_coeff = bitlen(2 * z_max_value);
-    let z_bytes_per_poly = (256 * z_bits_per_coeff + 7) / 8;
+    let z_bytes_per_poly = (256 * z_bits_per_coeff).div_ceil(8);
 
     // Calculate the required signature size
     let required_size = lambda / 4 + (l * z_bytes_per_poly) + omega + k;
@@ -1647,8 +1647,8 @@ fn decode_hint(bytes: &[u8], k: usize, omega: usize) -> Result<Vec<Polynomial>> 
     }
 
     // Ensure remaining positions are 0
-    for i in pos_idx..omega {
-        if positions[i] != 0 {
+    for &pos in positions.iter().skip(pos_idx).take(omega - pos_idx) {
+        if pos != 0 {
             return Err(Error::InvalidSignature);
         }
     }
@@ -1674,7 +1674,7 @@ fn encode_poly(poly: &Polynomial, bits: usize, bound: u32) -> Result<Vec<u8>> {
         }
     }
 
-    let bytes_needed = (bits_array.len() + 7) / 8;
+    let bytes_needed = bits_array.len().div_ceil(8);
     let mut result = vec![0u8; bytes_needed];
 
     for i in 0..bytes_needed {
@@ -1692,7 +1692,7 @@ fn encode_poly(poly: &Polynomial, bits: usize, bound: u32) -> Result<Vec<u8>> {
 
 /// Decode a polynomial with coefficients in [0, bound]
 fn decode_poly(bytes: &[u8], bits: usize, bound: u32) -> Result<Polynomial> {
-    let bytes_needed = (256 * bits + 7) / 8;
+    let bytes_needed = (256 * bits).div_ceil(8);
     if bytes.len() < bytes_needed {
         return Err(Error::EncodingError(format!(
             "Not enough bytes for polynomial: have {}, need {}",
@@ -1769,7 +1769,7 @@ fn encode_poly_signed(poly: &Polynomial, a: usize, b: usize) -> Result<Vec<u8>> 
         }
     }
 
-    let bytes_needed = (bits_array.len() + 7) / 8;
+    let bytes_needed = bits_array.len().div_ceil(8);
     let mut result = vec![0u8; bytes_needed];
 
     for i in 0..bytes_needed {
@@ -1788,7 +1788,7 @@ fn encode_poly_signed(poly: &Polynomial, a: usize, b: usize) -> Result<Vec<u8>> 
 /// Decode a polynomial with coefficients in [-a, b]
 fn decode_poly_signed(bytes: &[u8], a: usize, b: usize) -> Result<Polynomial> {
     let bits = bitlen((a + b) as u32);
-    let bytes_needed = (256 * bits + 7) / 8;
+    let bytes_needed = (256 * bits).div_ceil(8);
 
     if bytes.len() < bytes_needed {
         return Err(Error::EncodingError(format!(
@@ -1843,7 +1843,7 @@ fn encode_signature(
 
     // Calculate signature size
     let z_bits_per_coeff = bitlen((2 * gamma1 - 2) as u32);
-    let _z_bytes_per_poly = (256 * z_bits_per_coeff + 7) / 8;
+    let _z_bytes_per_poly = (256 * z_bits_per_coeff).div_ceil(8);
     #[cfg(test)]
     let z_size = l * _z_bytes_per_poly;
 
@@ -1870,8 +1870,8 @@ fn encode_signature(
     signature.extend_from_slice(c_tilde);
 
     // Encode z
-    for i in 0..l {
-        let encoded = encode_poly_signed(&z[i], gamma1 - 1, gamma1 - 1)?;
+    for z_elem in z.iter().take(l) {
+        let encoded = encode_poly_signed(z_elem, gamma1 - 1, gamma1 - 1)?;
         signature.extend_from_slice(&encoded);
     }
 
