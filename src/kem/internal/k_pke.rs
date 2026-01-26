@@ -146,7 +146,7 @@ pub(crate) fn encode_public_key(
     let d = 13; // The d parameter from FIPS 203
 
     // Calculate public key size
-    let t1_size = k * 32 * (bitlen(8380417 - 1) - d);
+    let t1_size = k * 32 * (bitlen(3329 - 1) - d);
     let pk_size = 32 + t1_size;
 
     let mut public_key = Vec::with_capacity(pk_size);
@@ -156,7 +156,7 @@ pub(crate) fn encode_public_key(
 
     // Add t1
     for i in 0..k {
-        let encoded = byte_encode(&t1[i], 2_u32.pow(bitlen(8380417 - 1) as u32 - d as u32) - 1)?;
+        let encoded = byte_encode(&t1[i], 2_u32.pow(bitlen(3329 - 1) as u32 - d as u32) - 1)?;
         public_key.extend(encoded);
     }
 
@@ -215,7 +215,7 @@ pub(crate) fn decode_private_key(
     private_key: &[u8],
     parameter_set: ParameterSet,
 ) -> Result<(Vec<u8>, Vec<u8>, [u8; 32], [u8; 32])> {
-    let pk_size = 32 + 32 * parameter_set.k() * (bitlen(8380417 - 1) - 13);
+    let pk_size = 32 + 32 * parameter_set.k() * (bitlen(3329 - 1) - 13);
 
     // Extract components
     let dk_pke = private_key[0..384 * parameter_set.k()].to_vec();
@@ -419,12 +419,12 @@ fn reject_sample_ntt(seed: &[u8], _ntt_ctx: &NTTContext) -> Result<Polynomial> {
         let d1 = (out[0] as u32) | ((out[1] as u32 & 0x0F) << 8);
         let d2 = ((out[1] as u32 & 0xF0) >> 4) | ((out[2] as u32) << 4);
 
-        if d1 < 8380417 {
+        if d1 < 3329 {
             poly.coeffs[j] = d1 as i32;
             j += 1;
         }
 
-        if j < 256 && d2 < 8380417 {
+        if j < 256 && d2 < 3329 {
             poly.coeffs[j] = d2 as i32;
             j += 1;
         }
@@ -555,7 +555,7 @@ fn decode_public_key(
     rho.copy_from_slice(&public_key[0..32]);
 
     // Extract t1
-    let t1_size = 32 * (bitlen(8380417 - 1) - d);
+    let t1_size = 32 * (bitlen(3329 - 1) - d);
     let mut t = Vec::with_capacity(k);
 
     for i in 0..k {
@@ -563,7 +563,7 @@ fn decode_public_key(
         let end = start + t1_size;
         let t1_i = byte_decode(
             &public_key[start..end],
-            2_u32.pow(bitlen(8380417 - 1) as u32 - d as u32) - 1,
+            2_u32.pow(bitlen(3329 - 1) as u32 - d as u32) - 1,
         )?;
         t.push(t1_i);
     }
@@ -874,7 +874,7 @@ fn bit_unpack(bytes: &[u8], a: i32, b: i32) -> Result<Polynomial> {
 /// This implements the Compress_d function from the standard
 fn compress(poly: &Polynomial, d: usize) -> Result<Polynomial> {
     let mut result = Polynomial::new();
-    let q = 8380417; // ML-KEM modulus (q)
+    let q = 3329; // ML-KEM modulus (q)
 
     for i in 0..256 {
         let value = poly.coeffs[i];
@@ -891,7 +891,7 @@ fn compress(poly: &Polynomial, d: usize) -> Result<Polynomial> {
 /// This implements the Decompress_d function from the standard
 fn decompress(poly: &Polynomial, d: usize) -> Result<Polynomial> {
     let mut result = Polynomial::new();
-    let q = 8380417; // ML-KEM modulus (q)
+    let q = 3329; // ML-KEM modulus (q)
 
     for i in 0..256 {
         let value = poly.coeffs[i];
