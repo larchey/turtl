@@ -228,7 +228,7 @@ pub(crate) fn ml_dsa_sign_internal(
         }
 
         // Compute c = H(mu || w1)
-        let w1_encoded = encode_w1(&w1)?;
+        let w1_encoded = encode_w1(&w1, gamma2)?;
         let mut c_data = Vec::new();
         c_data.extend_from_slice(&mu);
         c_data.extend_from_slice(&w1_encoded);
@@ -572,7 +572,7 @@ pub(crate) fn ml_dsa_verify_internal(
     println!("  w1[0] (first 10): {:?}", &w1[0].coeffs[0..10]);
 
     // Encode w1
-    let w1_encoded = encode_w1(&w1)?;
+    let w1_encoded = encode_w1(&w1, gamma2)?;
 
     // Compute c' = H(mu || w1)
     let mut c_prime_data = Vec::new();
@@ -1224,15 +1224,14 @@ fn use_hint(h: &Polynomial, r: &Polynomial, gamma2: usize) -> Result<Polynomial>
 }
 
 /// Encode the w1 component for challenge hash
-fn encode_w1(w1: &[Polynomial]) -> Result<Vec<u8>> {
+fn encode_w1(w1: &[Polynomial], gamma2: usize) -> Result<Vec<u8>> {
     let k = w1.len();
-    // For high bits, we need to use up to 12 bits per coefficient for test parameter
-    // and 6 bits for regular parameters
-    #[cfg(test)]
-    let bits_per_coeff = 12;
+    let q = 8380417; // ML-DSA modulus
 
-    #[cfg(not(test))]
-    let bits_per_coeff = 6;
+    // FIPS 204 Algorithm 23: w1Encode
+    // Compute m = (q-1)/(2*gamma2) and use bitlen(m-1) bits per coefficient
+    let m = (q - 1) / (2 * gamma2 as i32);
+    let bits_per_coeff = bitlen((m - 1) as u32);
 
     // Calculate number of bytes needed per polynomial
     let bytes_per_poly = (256_usize * bits_per_coeff).div_ceil(8);
@@ -1246,52 +1245,24 @@ fn encode_w1(w1: &[Polynomial]) -> Result<Vec<u8>> {
             // Get the coefficient as a non-negative value
             let coeff_raw = w1[i].coeffs[j];
 
-            // Handle negative values
-            #[cfg(test)]
-            let coeff = if coeff_raw < 0 {
-                // For tests, use a different encoding for negative values
-                // to prevent overflow issues with unsigned_abs
-                // Map negative values to 0-2047 range, positive to 2048-4095
-                (2048 + coeff_raw) as u32 & 0xFFF
-            } else {
-                // For positive values, just use the value directly
-                coeff_raw as u32 & 0xFFF
-            };
+            // According to FIPS 204, w1 coefficients should always be non-negative
+            // They are in the range [0, m-1] where m = (q-1)/(2*gamma2)
+            if coeff_raw < 0 {
+                return Err(Error::EncodingError(format!(
+                    "w1 coefficient must be non-negative, got: {}",
+                    coeff_raw
+                )));
+            }
 
-            #[cfg(not(test))]
-            // Handle negative values by using absolute value
-            let coeff = coeff_raw.unsigned_abs();
-
-            // We need to ensure the coefficient is within the expected range
-            #[cfg(test)]
-            let max_coeff = (1 << bits_per_coeff) - 1;
-
-            #[cfg(not(test))]
+            let coeff = coeff_raw as u32;
             let max_coeff = (1 << bits_per_coeff) - 1;
 
             // Check if coefficient is too large
             if coeff > max_coeff {
-                #[cfg(test)]
-                {
-                    // In test mode, clamp the value rather than failing
-                    let clamped = max_coeff;
-
-                    // Store clamped coefficient in bits_per_coeff bits
-                    for b in 0..bits_per_coeff {
-                        bits.push(((clamped >> b) & 1) as u8);
-                    }
-
-                    // Continue to next coefficient
-                    continue;
-                }
-
-                #[cfg(not(test))]
-                {
-                    return Err(Error::EncodingError(format!(
-                        "Coefficient out of range for w1 encoding: {}",
-                        coeff
-                    )));
-                }
+                return Err(Error::EncodingError(format!(
+                    "Coefficient out of range for w1 encoding: {} (max {})",
+                    coeff, max_coeff
+                )));
             }
 
             // Store coefficient in bits_per_coeff bits
