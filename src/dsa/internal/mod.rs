@@ -1035,26 +1035,29 @@ fn decompose_coefficient(r: i32, alpha: usize) -> (i32, i32) {
 }
 
 /// Make hint for high bits
+/// Implements MakeHint from FIPS 204 Algorithm 39
+/// Called as MakeHint(z=-ct₀, r=w-cs₂+ct₀, α=2γ₂)
+/// Returns 1 if HighBits(r, α) ≠ HighBits(r + z, α)
 fn make_hint(w_prime: &Polynomial, ct0: &Polynomial, gamma2: usize) -> Result<Polynomial> {
     let mut h = Polynomial::new();
+    let q = 8380417; // ML-DSA modulus
 
     for i in 0..256 {
-        // Calculate the difference with bounds checks
-        let diff = match w_prime.coeffs[i].checked_sub(ct0.coeffs[i]) {
-            Some(d) => d,
-            None => {
-                // Handle the case where subtraction would underflow
-                // Use saturating subtraction instead
-                w_prime.coeffs[i].saturating_sub(ct0.coeffs[i])
-            }
-        };
+        // FIPS 204: MakeHint(z, r, α) checks if HighBits(r) ≠ HighBits(r + z)
+        // where: z = -ct₀, r = w - cs₂ + ct₀
+        // So: r + z = (w - cs₂ + ct₀) + (-ct₀) = w - cs₂
+        //
+        // Since we're passed ct₀ (not -ct₀), we compute:
+        // r + z = w_prime + (-ct0) = w_prime - ct0
+        let diff = w_prime.coeffs[i] as i64 - ct0.coeffs[i] as i64;
+        let r_plus_z = ((diff % q as i64) + q as i64) as i32 % q;
 
-        // Decompose coefficients using safe function
-        let (w1, _) = decompose_coefficient(w_prime.coeffs[i], gamma2);
-        let (v1, _) = decompose_coefficient(diff, gamma2);
+        // Decompose r and r + z to get high bits
+        let (r1, _) = decompose_coefficient(w_prime.coeffs[i], gamma2);
+        let (v1, _) = decompose_coefficient(r_plus_z, gamma2);
 
-        // If high bits differ, set hint to 1
-        h.coeffs[i] = if w1 != v1 { 1 } else { 0 };
+        // Set hint to 1 if high bits differ
+        h.coeffs[i] = if r1 != v1 { 1 } else { 0 };
     }
 
     Ok(h)
