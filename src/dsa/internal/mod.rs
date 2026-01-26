@@ -86,6 +86,32 @@ pub(crate) fn ml_dsa_keygen_internal(
     // 6. Power2Round to get t1 and t0
     let (t1, t0) = power2round(&t, d)?;
 
+    // DEBUG: Verify Power2Round decomposition and check t0 range
+    #[cfg(test)]
+    {
+        let mut min_t0 = i32::MAX;
+        let mut max_t0 = i32::MIN;
+        for i in 0..k {
+            for j in 0..256 {
+                let reconstructed = (t1[i].coeffs[j] << d) + t0[i].coeffs[j];
+                let original = t[i].coeffs[j];
+                if reconstructed != original {
+                    println!("WARNING: Power2Round decomposition mismatch at [{},{}]:", i, j);
+                    println!("  t_original = {}", original);
+                    println!("  t1 = {}, t0 = {}", t1[i].coeffs[j], t0[i].coeffs[j]);
+                    println!("  t1*2^d + t0 = {}", reconstructed);
+                }
+                min_t0 = min_t0.min(t0[i].coeffs[j]);
+                max_t0 = max_t0.max(t0[i].coeffs[j]);
+            }
+        }
+        let expected_bound = 1i32 << (d - 1);
+        println!("t0 range: [{}, {}], expected: [{}, {}]", min_t0, max_t0, -expected_bound, expected_bound);
+        if min_t0 < -expected_bound || max_t0 > expected_bound {
+            println!("WARNING: t0 values outside expected range!");
+        }
+    }
+
     // 7-10. Encode the keys
     let public_key_bytes = encode_public_key(&rho, &t1, parameter_set)?;
     let tr = hash::h_function(&public_key_bytes, 64);
@@ -780,7 +806,11 @@ fn sample_bounded_poly(seed: &[u8], eta: usize) -> Result<Polynomial> {
 
     let mut j = 0;
     let mut iterations = 0;
-    let max_iterations = 480; // Safety limit
+    let max_iterations = 1024; // Safety limit - increased for correct rejection sampling
+
+    // FIPS 204: Sample coefficients in [-eta, eta] using rejection sampling
+    // Accept nibble values in [0, 2*eta], which map to [-eta, eta] after subtracting eta
+    let threshold = 2 * eta + 1;
 
     while j < 256 && iterations < max_iterations {
         iterations += 1;
@@ -790,19 +820,22 @@ fn sample_bounded_poly(seed: &[u8], eta: usize) -> Result<Polynomial> {
         let b1 = byte & 0x0F;
         let b2 = byte >> 4;
 
-        // Use rejection sampling
-        if usize::from(b1) < 15 - 5 + 2 * eta + 1 {
+        // Rejection sampling: accept if value in valid range
+        if usize::from(b1) < threshold {
             poly.coeffs[j] = (b1 as i32) - (eta as i32);
             j += 1;
         }
 
-        if j < 256 && usize::from(b2) < 15 - 5 + 2 * eta + 1 {
+        if j < 256 && usize::from(b2) < threshold {
             poly.coeffs[j] = (b2 as i32) - (eta as i32);
             j += 1;
         }
     }
 
     if j < 256 {
+        eprintln!("ERROR: sample_bounded_poly failed after {} iterations, only got {} coefficients",
+            iterations, j);
+        eprintln!("  eta={}, threshold={}", eta, 2 * eta + 1);
         return Err(Error::RandomnessError);
     }
 
@@ -854,33 +887,25 @@ fn compute_public_t(
 /// Split t into high and low bits (Power2Round)
 fn power2round(t: &[Polynomial], d: usize) -> Result<(Vec<Polynomial>, Vec<Polynomial>)> {
     let k = t.len();
-    let _q = 8380417; // ML-DSA modulus
-
     let mut t1 = Vec::with_capacity(k);
     let mut t0 = Vec::with_capacity(k);
 
     // FIPS 204 Algorithm 34: Power2Round(r, d)
     // r1 ← ⌊(r + 2^(d−1))/2^d⌋ (rounding before division)
     // r0 ← r − r1 · 2^d
-    let rounding_offset = 1i32 << (d - 1); // 2^(d-1)
+    let rounding_offset = 1i32 << (d - 1); // 2^(d-1) = 4096 for d=13
 
     for i in 0..k {
         let mut t1_i = Polynomial::new();
         let mut t0_i = Polynomial::new();
 
         for j in 0..256 {
-            // FIPS 204 Algorithm 34: Power2Round
-            // Input: r ∈ [0, q-1]
-            // r1 ← ⌊(r + 2^(d−1))/2^d⌋
-            // r0 ← r − r1 · 2^d
-            // Note: r0 should be in centered form [-2^(d-1), 2^(d-1)]
-
             let t_val = t[i].coeffs[j];
 
             // t1 = ⌊(t + 2^(d−1))/2^d⌋ using integer arithmetic
             t1_i.coeffs[j] = (t_val + rounding_offset) >> d;
 
-            // t0 = t - t1*2^d (can be negative, keep in centered form)
+            // t0 = t - t1*2^d (remains in centered form, can be negative)
             t0_i.coeffs[j] = t_val - (t1_i.coeffs[j] << d);
         }
 
@@ -1458,6 +1483,14 @@ fn encode_private_key(
     private_key.extend_from_slice(key_seed);
     private_key.extend_from_slice(tr);
 
+    // DEBUG: Check s1 values before encoding
+    for i in 0..l.min(2) {
+        let min_s1 = s1[i].coeffs.iter().min().unwrap();
+        let max_s1 = s1[i].coeffs.iter().max().unwrap();
+        eprintln!("DEBUG_ENCODE: s1[{}] range before encoding: [{}, {}], expected: [-{}, {}]",
+            i, min_s1, max_s1, eta, eta);
+    }
+
     // Encode s1
     for i in 0..l {
         let encoded = encode_poly_signed(&s1[i], eta, eta)?;
@@ -1834,24 +1867,34 @@ fn encode_poly_signed(poly: &Polynomial, a: usize, b: usize) -> Result<Vec<u8>> 
     // Track if we've shown warnings already to reduce output spam
     let mut min_warning_shown = false;
     let mut max_warning_shown = false;
+    let mut min_val = i32::MAX;
+    let mut max_val = i32::MIN;
 
     for i in 0..256 {
         // Shift coefficient to the range [0, a+b]
         let mut coeff = poly.coeffs[i] + (a as i32);
+
+        // Track actual range before clamping
+        min_val = min_val.min(coeff);
+        max_val = max_val.max(coeff);
 
         // Ensure coefficient is in valid range
         if coeff < 0 {
             coeff = 0;
             // Log warning for coefficient adjustment (only once)
             if !min_warning_shown {
-                eprintln!("Warning: Some coefficients were clamped to minimum value");
+                eprintln!("WARNING: encode_poly_signed clamped to MIN! Range: [{}, {}], expected: [0, {}]",
+                    min_val, max_val, a + b);
+                eprintln!("  a={}, b={}, some coeffs < -{}", a, b, a);
                 min_warning_shown = true;
             }
         } else if coeff > (a + b) as i32 {
             coeff = (a + b) as i32;
             // Log warning for coefficient adjustment (only once)
             if !max_warning_shown {
-                eprintln!("Warning: Some coefficients were clamped to maximum value");
+                eprintln!("WARNING: encode_poly_signed clamped to MAX! Range: [{}, {}], expected: [0, {}]",
+                    min_val, max_val, a + b);
+                eprintln!("  a={}, b={}, some coeffs > {}", a, b, b);
                 max_warning_shown = true;
             }
         }

@@ -81,6 +81,7 @@ pub fn h_function(input: &[u8], output_len: usize) -> Vec<u8> {
 /// SHAKE256 context for incremental operations
 pub struct SHAKE256Context {
     inner: Shake256,
+    reader: Option<sha3::Shake256Reader>,
 }
 
 impl SHAKE256Context {
@@ -88,6 +89,7 @@ impl SHAKE256Context {
     pub fn init() -> Self {
         Self {
             inner: Shake256::default(),
+            reader: None,
         }
     }
 
@@ -98,11 +100,15 @@ impl SHAKE256Context {
 
     /// Squeeze output bytes
     pub fn squeeze(&mut self, output_len: usize) -> Vec<u8> {
-        // Clone the hasher to keep the state intact for future operations
-        let hasher_clone = self.inner.clone();
-        let mut reader = hasher_clone.finalize_xof();
+        // Finalize on first squeeze, then reuse reader to advance state
+        if self.reader.is_none() {
+            // Move inner out and finalize it (can't clone - need to consume)
+            let hasher = core::mem::replace(&mut self.inner, Shake256::default());
+            self.reader = Some(hasher.finalize_xof());
+        }
+
         let mut output = vec![0u8; output_len];
-        reader.read(&mut output);
+        self.reader.as_mut().unwrap().read(&mut output);
         output
     }
 }
@@ -110,6 +116,7 @@ impl SHAKE256Context {
 /// SHAKE128 context for incremental operations
 pub struct SHAKE128Context {
     inner: Shake128,
+    reader: Option<sha3::Shake128Reader>,
 }
 
 impl SHAKE128Context {
@@ -117,6 +124,7 @@ impl SHAKE128Context {
     pub fn init() -> Self {
         Self {
             inner: Shake128::default(),
+            reader: None,
         }
     }
 
@@ -127,11 +135,15 @@ impl SHAKE128Context {
 
     /// Squeeze output bytes
     pub fn squeeze(&mut self, output_len: usize) -> Vec<u8> {
-        // Clone the hasher to keep the state intact for future operations
-        let hasher_clone = self.inner.clone();
-        let mut reader = hasher_clone.finalize_xof();
+        // Finalize on first squeeze, then reuse reader to advance state
+        if self.reader.is_none() {
+            // Move inner out and finalize it (can't clone - need to consume)
+            let hasher = core::mem::replace(&mut self.inner, Shake128::default());
+            self.reader = Some(hasher.finalize_xof());
+        }
+
         let mut output = vec![0u8; output_len];
-        reader.read(&mut output);
+        self.reader.as_mut().unwrap().read(&mut output);
         output
     }
 }
