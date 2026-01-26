@@ -80,7 +80,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn demo_kem_512() -> Result<(), Box<dyn std::error::Error>> {
     println!("═══ ML-KEM-512 (Security Category 1) ═══");
     println!("Security Level: Comparable to AES-128 (128-bit security)");
-    println!("Use Case: Bandwidth-constrained applications requiring AES-128 equivalent security\n");
+    println!(
+        "Use Case: Bandwidth-constrained applications requiring AES-128 equivalent security\n"
+    );
 
     // Step 1: Key Generation (performed by the receiver, Bob)
     println!("1. Key Generation (Bob)...");
@@ -96,7 +98,10 @@ fn demo_kem_512() -> Result<(), Box<dyn std::error::Error>> {
     let (ciphertext, shared_secret_alice) = encapsulate(&public_key)?;
 
     println!("   ✓ Ciphertext:     {} bytes", ciphertext.as_bytes().len());
-    println!("   ✓ Shared secret:  {} bytes", shared_secret_alice.as_bytes().len());
+    println!(
+        "   ✓ Shared secret:  {} bytes",
+        shared_secret_alice.as_bytes().len()
+    );
     println!("   → Alice sends the ciphertext to Bob (the shared secret stays private)");
 
     // Step 3: Decapsulation (performed by the receiver, Bob)
@@ -104,7 +109,10 @@ fn demo_kem_512() -> Result<(), Box<dyn std::error::Error>> {
     println!("   → Bob uses his private key to extract the shared secret from the ciphertext");
     let shared_secret_bob = decapsulate(&private_key, &ciphertext)?;
 
-    println!("   ✓ Shared secret:  {} bytes", shared_secret_bob.as_bytes().len());
+    println!(
+        "   ✓ Shared secret:  {} bytes",
+        shared_secret_bob.as_bytes().len()
+    );
 
     // Step 4: Verify that both parties have the same shared secret
     println!("\n4. Verification...");
@@ -146,7 +154,10 @@ fn demo_kem_768() -> Result<(), Box<dyn std::error::Error>> {
     let (ciphertext, shared_secret_alice) = encapsulate(&public_key)?;
 
     println!("   ✓ Ciphertext:     {} bytes", ciphertext.as_bytes().len());
-    println!("   ✓ Shared secret:  {} bytes", shared_secret_alice.as_bytes().len());
+    println!(
+        "   ✓ Shared secret:  {} bytes",
+        shared_secret_alice.as_bytes().len()
+    );
     println!("   → Alice sends the ciphertext to Bob (the shared secret stays private)");
 
     // Step 3: Decapsulation (performed by the receiver, Bob)
@@ -154,7 +165,10 @@ fn demo_kem_768() -> Result<(), Box<dyn std::error::Error>> {
     println!("   → Bob uses his private key to extract the shared secret from the ciphertext");
     let shared_secret_bob = decapsulate(&private_key, &ciphertext)?;
 
-    println!("   ✓ Shared secret:  {} bytes", shared_secret_bob.as_bytes().len());
+    println!(
+        "   ✓ Shared secret:  {} bytes",
+        shared_secret_bob.as_bytes().len()
+    );
 
     // Step 4: Verify that both parties have the same shared secret
     println!("\n4. Verification...");
@@ -196,7 +210,10 @@ fn demo_kem_1024() -> Result<(), Box<dyn std::error::Error>> {
     let (ciphertext, shared_secret_alice) = encapsulate(&public_key)?;
 
     println!("   ✓ Ciphertext:     {} bytes", ciphertext.as_bytes().len());
-    println!("   ✓ Shared secret:  {} bytes", shared_secret_alice.as_bytes().len());
+    println!(
+        "   ✓ Shared secret:  {} bytes",
+        shared_secret_alice.as_bytes().len()
+    );
     println!("   → Alice sends the ciphertext to Bob (the shared secret stays private)");
 
     // Step 3: Decapsulation (performed by the receiver, Bob)
@@ -204,7 +221,10 @@ fn demo_kem_1024() -> Result<(), Box<dyn std::error::Error>> {
     println!("   → Bob uses his private key to extract the shared secret from the ciphertext");
     let shared_secret_bob = decapsulate(&private_key, &ciphertext)?;
 
-    println!("   ✓ Shared secret:  {} bytes", shared_secret_bob.as_bytes().len());
+    println!(
+        "   ✓ Shared secret:  {} bytes",
+        shared_secret_bob.as_bytes().len()
+    );
 
     // Step 4: Verify that both parties have the same shared secret
     println!("\n4. Verification...");
