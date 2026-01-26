@@ -66,9 +66,6 @@ use crate::error::{Error, Result};
 // Import only what we need
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-// Import aux for ceil_log2
-use crate::kem::internal::aux;
-
 pub mod decapsulate;
 pub mod encapsulate;
 mod internal;
@@ -224,8 +221,9 @@ impl PrivateKey {
             return Err(Error::InvalidPrivateKey);
         }
 
-        let d = 13; // The d parameter from FIPS 203
-        let pk_size = 32 + 32 * k * (aux::ceil_log2(8380417 - 1) as usize - d);
+        // ML-KEM public key size: 32 (rho) + k * 384 (t1 with 12 bits/coeff)
+        const BITS_PER_COEFF: usize = 12;
+        let pk_size = 32 + k * (256 * BITS_PER_COEFF / 8);
 
         // Ensure the private key is long enough to contain the public key
         if self.bytes.len() < dk_pke_size + pk_size {

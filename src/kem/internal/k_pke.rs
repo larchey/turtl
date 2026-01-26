@@ -143,20 +143,23 @@ pub(crate) fn encode_public_key(
     parameter_set: ParameterSet,
 ) -> Result<Vec<u8>> {
     let k = parameter_set.k();
-    let d = 13; // The d parameter from FIPS 203
 
-    // Calculate public key size
-    let t1_size = k * 32 * (bitlen(3329 - 1) - d);
-    let pk_size = 32 + t1_size;
+    // ML-KEM uses 12 bits per coefficient for t1 encoding (per FIPS 203)
+    // This differs from ML-DSA which uses (bitlen(q-1) - d)
+    // For ML-KEM q=3329, the coefficients of t1 fit in 12 bits
+    const BITS_PER_COEFF: usize = 12;
+    let bytes_per_poly = (256 * BITS_PER_COEFF) / 8; // 384 bytes per polynomial
+    let pk_size = 32 + k * bytes_per_poly;
 
     let mut public_key = Vec::with_capacity(pk_size);
 
     // Add rho
     public_key.extend_from_slice(rho);
 
-    // Add t1
+    // Add t1 - each polynomial encoded with 12 bits per coefficient
+    // Maximum value for t1 coefficients: 2^12 - 1 = 4095
     for i in 0..k {
-        let encoded = byte_encode(&t1[i], 2_u32.pow(bitlen(3329 - 1) as u32 - d as u32) - 1)?;
+        let encoded = byte_encode(&t1[i], (1 << BITS_PER_COEFF) - 1)?;
         public_key.extend(encoded);
     }
 
@@ -215,7 +218,9 @@ pub(crate) fn decode_private_key(
     private_key: &[u8],
     parameter_set: ParameterSet,
 ) -> Result<(Vec<u8>, Vec<u8>, [u8; 32], [u8; 32])> {
-    let pk_size = 32 + 32 * parameter_set.k() * (bitlen(3329 - 1) - 13);
+    // ML-KEM public key size: 32 (rho) + k * 384 (t1 with 12 bits/coeff)
+    const BITS_PER_COEFF: usize = 12;
+    let pk_size = 32 + parameter_set.k() * (256 * BITS_PER_COEFF / 8);
 
     // Extract components
     let dk_pke = private_key[0..384 * parameter_set.k()].to_vec();
