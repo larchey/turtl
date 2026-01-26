@@ -257,11 +257,9 @@ impl ParameterSet {
     /// Get the size of the private key in bytes
     pub fn private_key_size(&self) -> usize {
         match self {
-            // Updated for correct t0 encoding (14 bits instead of 13 bits)
-            // Added +128 bytes (k=4), +192 bytes (k=6), +256 bytes (k=8)
-            Self::MlDsa44 => 2688, // Was 2560
-            Self::MlDsa65 => 4224, // Was 4032
-            Self::MlDsa87 => 5152, // Was 4896
+            Self::MlDsa44 => 2560,
+            Self::MlDsa65 => 4032,
+            Self::MlDsa87 => 4896,
             #[cfg(test)]
             Self::TestSmall => 800, // Approximate for testing
         }
