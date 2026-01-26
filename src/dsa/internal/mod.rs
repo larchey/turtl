@@ -328,12 +328,15 @@ pub(crate) fn ml_dsa_sign_internal(
 
         // Create hints
         let mut h = Vec::with_capacity(k);
+        let mut w_prime_for_hints = Vec::with_capacity(k);
         for i in 0..k {
             let mut w_prime = w[i].clone();
             w_prime.sub_assign(&cs2[i], ntt_ctx.modulus);
 
             // Add ct0 to w'
             w_prime.add_assign(&ct0[i], ntt_ctx.modulus);
+
+            w_prime_for_hints.push(w_prime.clone());
 
             let h_i = make_hint(&w_prime, &ct0[i], gamma2)?;
             h.push(h_i);
@@ -355,6 +358,12 @@ pub(crate) fn ml_dsa_sign_internal(
             z_centered[i].to_centered_representation(ntt_ctx.modulus);
         }
 
+        println!("\n=== SIGNING SUCCESS (attempt {}) ===", kappa);
+        println!("  w[0] (first 10): {:?}", &w[0].coeffs[0..10]);
+        println!("  w_prime_signing[0] (first 10): {:?}", &w_prime_for_hints[0].coeffs[0..10]);
+        println!("  w1[0] (first 10): {:?}", &w1[0].coeffs[0..10]);
+        println!("  c_tilde (first 10): {:?}", &c_tilde[0..10]);
+
         // Encode the signature
         return encode_signature(&c_tilde, &z_centered, &h, parameter_set);
     }
@@ -374,11 +383,15 @@ pub(crate) fn ml_dsa_verify_internal(
     signature_bytes: &[u8],
     parameter_set: ParameterSet,
 ) -> Result<bool> {
+    println!("\n=== ENTERING VERIFICATION ===");
+
     // Decode public key
     let (rho, t1) = decode_public_key(public_key_bytes, parameter_set)?;
+    println!("Decoded public key");
 
     // Decode signature
     let (c_tilde, z, h) = decode_signature(signature_bytes, parameter_set)?;
+    println!("Decoded signature");
 
     // Get parameters
     let (k, l) = parameter_set.dimensions();
@@ -390,6 +403,7 @@ pub(crate) fn ml_dsa_verify_internal(
 
     // Verify c_tilde length
     if c_tilde.len() != parameter_set.lambda() / 4 {
+        println!("ERROR: c_tilde length check failed");
         return Err(Error::InvalidSignature);
     }
 
@@ -403,9 +417,11 @@ pub(crate) fn ml_dsa_verify_internal(
             .map_err(|_| Error::InvalidSignature)?;
 
         if norm >= (gamma1 - beta) as i32 {
+            println!("ERROR: z norm check failed at i={}, norm={}", i, norm);
             return Ok(false);
         }
     }
+    println!("Passed z checks");
 
     // Validate that the hint vector has at most omega ones
     let hint_ones = count_ones(&h);
@@ -414,8 +430,10 @@ pub(crate) fn ml_dsa_verify_internal(
     fault_detection::verify_bounds(hint_ones, 0, omega).map_err(|_| Error::InvalidSignature)?;
 
     if hint_ones > omega {
+        println!("ERROR: hint ones check failed: {} > {}", hint_ones, omega);
         return Err(Error::InvalidSignature);
     }
+    println!("Passed hint checks");
 
     // Create NTT context
     let ntt_ctx = NTTContext::new(NTTType::MLDSA);
@@ -436,6 +454,8 @@ pub(crate) fn ml_dsa_verify_internal(
     let mut c_hat = c.clone();
     ntt_ctx.forward(&mut c_hat)?;
 
+    println!("About to compute Az");
+
     // Convert z to [0, q-1] representation for NTT operations
     // z is decoded in centered representation, but NTT requires [0, q-1]
     let mut z_reduced = z.clone();
@@ -445,6 +465,10 @@ pub(crate) fn ml_dsa_verify_internal(
 
     // Compute Az using reduced z
     let az = compute_w(&matrix_a, &z_reduced, &ntt_ctx)?;
+
+    println!("\n=== VERIFICATION DEBUG ===");
+    println!("  t1[0] (first 10): {:?}", &t1[0].coeffs[0..10]);
+    println!("  Az[0] (first 10): {:?}", &az[0].coeffs[0..10]);
 
     // Compute c*t1*2^d
     // FIPS 204 Algorithm 2, Line 7: w' ← NTT^{-1}(A ◦ NTT(z) - c_hat ◦ NTT(t1·2^d))
@@ -460,8 +484,16 @@ pub(crate) fn ml_dsa_verify_internal(
             t1_2d.coeffs[j] = t1[i].coeffs[j] << d;
         }
 
+        if i == 0 {
+            println!("  t1*2^d before reduce (first 10): {:?}", &t1_2d.coeffs[0..10]);
+        }
+
         // Step 2: Reduce modulo q (coefficients should be in [0, q-1])
         t1_2d.reduce_modulo(ntt_ctx.modulus);
+
+        if i == 0 {
+            println!("  t1*2^d after reduce (first 10): {:?}", &t1_2d.coeffs[0..10]);
+        }
 
         // Step 3: Transform to NTT domain
         ntt_ctx.forward(&mut t1_2d)?;
@@ -471,6 +503,10 @@ pub(crate) fn ml_dsa_verify_internal(
 
         // Step 5: Transform back to coefficient domain
         ntt_ctx.inverse(&mut ct1_i)?;
+
+        if i == 0 {
+            println!("  ct1[0] (first 10): {:?}", &ct1_i.coeffs[0..10]);
+        }
 
         ct1.push(ct1_i);
     }
@@ -483,12 +519,16 @@ pub(crate) fn ml_dsa_verify_internal(
         w_prime.push(w_i);
     }
 
+    println!("  w_prime[0] (first 10): {:?}", &w_prime[0].coeffs[0..10]);
+
     // Use hints to compute w1
     let mut w1 = Vec::with_capacity(k);
     for i in 0..k {
         let w1_i = use_hint(&h[i], &w_prime[i], gamma2)?;
         w1.push(w1_i);
     }
+
+    println!("  w1[0] (first 10): {:?}", &w1[0].coeffs[0..10]);
 
     // Encode w1
     let w1_encoded = encode_w1(&w1)?;
@@ -499,10 +539,15 @@ pub(crate) fn ml_dsa_verify_internal(
     c_prime_data.extend_from_slice(&w1_encoded);
     let c_prime = hash::h_function(&c_prime_data, parameter_set.lambda() / 4);
 
+    println!("  c_tilde (first 10): {:?}", &c_tilde[0..10]);
+    println!("  c_prime (first 10): {:?}", &c_prime[0..10]);
+
     // Compare c_tilde and c_prime
     if c_tilde == c_prime {
+        println!("✓ Verification PASSED");
         Ok(true)
     } else {
+        println!("✗ Verification FAILED: c_tilde != c_prime");
         Ok(false)
     }
 }
