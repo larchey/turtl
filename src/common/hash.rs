@@ -103,7 +103,7 @@ impl SHAKE256Context {
         // Finalize on first squeeze, then reuse reader to advance state
         if self.reader.is_none() {
             // Move inner out and finalize it (can't clone - need to consume)
-            let hasher = core::mem::replace(&mut self.inner, Shake256::default());
+            let hasher = core::mem::take(&mut self.inner);
             self.reader = Some(hasher.finalize_xof());
         }
 
@@ -138,7 +138,7 @@ impl SHAKE128Context {
         // Finalize on first squeeze, then reuse reader to advance state
         if self.reader.is_none() {
             // Move inner out and finalize it (can't clone - need to consume)
-            let hasher = core::mem::replace(&mut self.inner, Shake128::default());
+            let hasher = core::mem::take(&mut self.inner);
             self.reader = Some(hasher.finalize_xof());
         }
 
