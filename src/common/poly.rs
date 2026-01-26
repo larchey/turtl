@@ -25,6 +25,12 @@ impl Zeroize for Polynomial {
 // Manual implementation of ZeroizeOnDrop
 impl ZeroizeOnDrop for Polynomial {}
 
+impl Default for Polynomial {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Polynomial {
     /// Create a new zero polynomial
     pub fn new() -> Self {
@@ -130,7 +136,7 @@ impl Polynomial {
     /// Reduce all coefficients modulo q
     pub fn reduce_modulo(&mut self, modulus: i32) {
         for i in 0..256 {
-            self.coeffs[i] = self.coeffs[i] % modulus;
+            self.coeffs[i] %= modulus;
             if self.coeffs[i] < 0 {
                 self.coeffs[i] += modulus;
             }

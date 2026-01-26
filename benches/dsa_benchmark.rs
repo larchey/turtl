@@ -232,8 +232,6 @@ fn bench_all_parameter_sets(c: &mut Criterion) {
             ParameterSet::MlDsa44 => "44",
             ParameterSet::MlDsa65 => "65",
             ParameterSet::MlDsa87 => "87",
-            #[cfg(test)]
-            _ => "test",
         };
 
         // Benchmark key generation

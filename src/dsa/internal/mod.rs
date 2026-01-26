@@ -32,7 +32,7 @@ pub(crate) fn seed_to_keypair(
             let private_key = PrivateKey::new(private_key_bytes, parameter_set)?;
 
             // Return the key pair
-            return Ok(super::KeyPair::from_keys(public_key, private_key)?);
+            return super::KeyPair::from_keys(public_key, private_key);
         }
     }
 
@@ -45,7 +45,7 @@ pub(crate) fn seed_to_keypair(
     let private_key = PrivateKey::new(private_key_bytes, parameter_set)?;
 
     // Return the key pair
-    Ok(super::KeyPair::from_keys(public_key, private_key)?)
+    super::KeyPair::from_keys(public_key, private_key)
 }
 
 /// Implement ML-DSA key generation from seed
@@ -974,7 +974,7 @@ fn decompose_coefficient(r: i32, alpha: usize) -> (i32, i32) {
     // Validate alpha is within a reasonable range to prevent errors
     // ML-DSA specifies alpha is either 88 (for ML-DSA-44) or 32 (for ML-DSA-65/87)
     // This should be checked at a higher level, but we add a defensive check here
-    let _ = fault_detection::verify_bounds(alpha, 1, 1000000).expect("Alpha value is out of range");
+    fault_detection::verify_bounds(alpha, 1, 1000000).expect("Alpha value is out of range");
 
     // Compute 2*alpha safely, checking for overflow
     let two_alpha = match (alpha as i32).checked_mul(2) {
@@ -1135,7 +1135,7 @@ fn encode_w1(w1: &[Polynomial]) -> Result<Vec<u8>> {
 
             #[cfg(not(test))]
             // Handle negative values by using absolute value
-            let coeff = coeff_raw.unsigned_abs() as u32;
+            let coeff = coeff_raw.unsigned_abs();
 
             // We need to ensure the coefficient is within the expected range
             #[cfg(test)]
@@ -1289,7 +1289,7 @@ fn encode_public_key(
     // Calculate t1 size - coefficients are in [0, (q-1)/2^d]
     let max_value = (8380417 - 1) >> d;
     let bits_per_coeff = bitlen(max_value as u32);
-    let _t1_size = k * (256 * bits_per_coeff).div_ceil(8);
+    let _t1_size = k * (256usize * bits_per_coeff).div_ceil(8);
 
     #[cfg(test)]
     let public_key_size = match parameter_set {
@@ -1402,7 +1402,7 @@ fn decode_public_key(
     // Extract t1
     let max_value = (8380417 - 1) >> d;
     let bits_per_coeff = bitlen(max_value as u32);
-    let bytes_per_poly = (256_usize * bits_per_coeff as usize).div_ceil(8);
+    let bytes_per_poly = (256_usize * bits_per_coeff).div_ceil(8);
 
     // Check if we have enough bytes for the t1 polynomials
     if public_key_bytes.len() < 32 + k * bytes_per_poly {
@@ -1674,7 +1674,7 @@ fn encode_poly(poly: &Polynomial, bits: usize, bound: u32) -> Result<Vec<u8>> {
         }
     }
 
-    let bytes_needed = (bits_array.len() + 7) / 8;
+    let bytes_needed = bits_array.len().div_ceil(8);
     let mut result = vec![0u8; bytes_needed];
 
     for i in 0..bytes_needed {
@@ -1692,7 +1692,7 @@ fn encode_poly(poly: &Polynomial, bits: usize, bound: u32) -> Result<Vec<u8>> {
 
 /// Decode a polynomial with coefficients in [0, bound]
 fn decode_poly(bytes: &[u8], bits: usize, bound: u32) -> Result<Polynomial> {
-    let bytes_needed = (256 * bits + 7) / 8;
+    let bytes_needed = (256 * bits).div_ceil(8);
     if bytes.len() < bytes_needed {
         return Err(Error::EncodingError(format!(
             "Not enough bytes for polynomial: have {}, need {}",
@@ -1769,7 +1769,7 @@ fn encode_poly_signed(poly: &Polynomial, a: usize, b: usize) -> Result<Vec<u8>> 
         }
     }
 
-    let bytes_needed = (bits_array.len() + 7) / 8;
+    let bytes_needed = bits_array.len().div_ceil(8);
     let mut result = vec![0u8; bytes_needed];
 
     for i in 0..bytes_needed {
@@ -1788,7 +1788,7 @@ fn encode_poly_signed(poly: &Polynomial, a: usize, b: usize) -> Result<Vec<u8>> 
 /// Decode a polynomial with coefficients in [-a, b]
 fn decode_poly_signed(bytes: &[u8], a: usize, b: usize) -> Result<Polynomial> {
     let bits = bitlen((a + b) as u32);
-    let bytes_needed = (256 * bits + 7) / 8;
+    let bytes_needed = (256 * bits).div_ceil(8);
 
     if bytes.len() < bytes_needed {
         return Err(Error::EncodingError(format!(
@@ -1843,7 +1843,7 @@ fn encode_signature(
 
     // Calculate signature size
     let z_bits_per_coeff = bitlen((2 * gamma1 - 2) as u32);
-    let _z_bytes_per_poly = (256 * z_bits_per_coeff + 7) / 8;
+    let _z_bytes_per_poly = (256 * z_bits_per_coeff).div_ceil(8);
     #[cfg(test)]
     let z_size = l * _z_bytes_per_poly;
 

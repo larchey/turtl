@@ -48,6 +48,9 @@
 
 #![forbid(unsafe_code)]
 #![cfg_attr(not(feature = "std"), no_std)]
+// Allow certain clippy lints that require extensive refactoring
+#![allow(clippy::needless_range_loop)]
+#![allow(clippy::type_complexity)]
 
 // Public modules
 pub mod dsa;
