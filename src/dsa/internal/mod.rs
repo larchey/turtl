@@ -436,22 +436,41 @@ pub(crate) fn ml_dsa_verify_internal(
     let mut c_hat = c.clone();
     ntt_ctx.forward(&mut c_hat)?;
 
-    // Compute Az
-    let az = compute_w(&matrix_a, &z, &ntt_ctx)?;
+    // Convert z to [0, q-1] representation for NTT operations
+    // z is decoded in centered representation, but NTT requires [0, q-1]
+    let mut z_reduced = z.clone();
+    for i in 0..l {
+        z_reduced[i].reduce_modulo(ntt_ctx.modulus);
+    }
+
+    // Compute Az using reduced z
+    let az = compute_w(&matrix_a, &z_reduced, &ntt_ctx)?;
 
     // Compute c*t1*2^d
+    // FIPS 204 Algorithm 2, Line 7: w' ← NTT^{-1}(A ◦ NTT(z) - c_hat ◦ NTT(t1·2^d))
+    // Must compute t1*2^d FIRST, then multiply by c in NTT domain
     let mut ct1 = Vec::with_capacity(k);
+    let d = parameter_set.d();
+
     for i in 0..k {
-        let mut t1_hat = t1[i].clone();
-        ntt_ctx.forward(&mut t1_hat)?;
-
-        let mut ct1_i = ntt_ctx.multiply_ntt(&c_hat, &t1_hat)?;
-        ntt_ctx.inverse(&mut ct1_i)?;
-
-        // Multiply by 2^d
+        // Step 1: Compute t1*2^d in coefficient domain
+        let mut t1_2d = Polynomial::new();
         for j in 0..256 {
-            ct1_i.coeffs[j] <<= parameter_set.d();
+            // Multiply by 2^d (left shift)
+            t1_2d.coeffs[j] = t1[i].coeffs[j] << d;
         }
+
+        // Step 2: Reduce modulo q (coefficients should be in [0, q-1])
+        t1_2d.reduce_modulo(ntt_ctx.modulus);
+
+        // Step 3: Transform to NTT domain
+        ntt_ctx.forward(&mut t1_2d)?;
+
+        // Step 4: Multiply by c in NTT domain (c_hat ◦ NTT(t1·2^d))
+        let mut ct1_i = ntt_ctx.multiply_ntt(&c_hat, &t1_2d)?;
+
+        // Step 5: Transform back to coefficient domain
+        ntt_ctx.inverse(&mut ct1_i)?;
 
         ct1.push(ct1_i);
     }
@@ -1094,7 +1113,9 @@ fn use_hint(h: &Polynomial, r: &Polynomial, gamma2: usize) -> Result<Polynomial>
             // Safe modulo with overflow checking
             w1.coeffs[i] = ((adjusted % mod_value) + mod_value) % mod_value;
         } else {
-            w1.coeffs[i] = r1;
+            // FIPS 204 Algorithm 40 line 6: return r1 mod m (not just r1!)
+            // This ensures w1 is always in the correct range [0, m-1]
+            w1.coeffs[i] = ((r1 % mod_value) + mod_value) % mod_value;
         }
     }
 
