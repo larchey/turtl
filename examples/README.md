@@ -28,6 +28,43 @@ cargo run --example dsa_basic
 
 ---
 
+### `kem_basic.rs` - ML-KEM Key Encapsulation ✅
+
+**Status:** Fully functional
+
+Demonstrates the complete ML-KEM key encapsulation workflow:
+- Key generation for all parameter sets (ML-KEM-512, ML-KEM-768, ML-KEM-1024)
+- Encapsulation (sender generates ciphertext and shared secret)
+- Decapsulation (receiver recovers shared secret from ciphertext)
+- Verification that both parties derive the same shared secret
+
+**Run:**
+```bash
+cargo run --example kem_basic
+```
+
+**Key Concepts Covered:**
+- Parameter set selection based on security requirements
+- Two-party key establishment (Alice and Bob scenario)
+- Shared secret generation and verification
+- Size comparisons across parameter sets
+- Post-quantum key encapsulation mechanism
+
+---
+
+### `hedged_signing.rs` - ML-DSA Hedged Signing
+
+**Status:** Functional (depends on ML-DSA verification)
+
+Advanced example demonstrating hedged signing mode with multiple signatures of the same message.
+
+**Run:**
+```bash
+cargo run --example hedged_signing
+```
+
+---
+
 ## ML-DSA (Digital Signature Algorithm)
 
 ML-DSA is NIST's post-quantum digital signature standard (FIPS 204), based on the Module-LWE problem.
@@ -70,9 +107,9 @@ Example contexts:
 
 ## ML-KEM (Key Encapsulation Mechanism)
 
-> Examples for ML-KEM coming soon
-
 ML-KEM is NIST's post-quantum key encapsulation standard (FIPS 203), based on the Module-LWE problem.
+
+**See `kem_basic.rs` for a complete working example.**
 
 ### Parameter Sets
 
@@ -156,16 +193,20 @@ When using these examples as a reference for your own code:
 
 If you're new to post-quantum cryptography:
 
-1. Start with `dsa_basic.rs` to understand digital signatures
-2. Try modifying the examples:
+1. Start with `kem_basic.rs` to understand key encapsulation
+   - Simpler concept than signatures
+   - See how two parties establish a shared secret
+2. Move to `dsa_basic.rs` to understand digital signatures
+   - More complex with signing modes and contexts
+3. Try modifying the examples:
    - Change parameter sets
-   - Try different signing modes
-   - Experiment with context strings
-3. Read the FIPS specifications:
+   - For ML-DSA: try different signing modes and context strings
+   - For ML-KEM: observe how shared secrets change each time
+4. Read the FIPS specifications:
    - [FIPS 203 (ML-KEM)](https://csrc.nist.gov/pubs/fips/203/final)
    - [FIPS 204 (ML-DSA)](https://csrc.nist.gov/pubs/fips/204/final)
-4. Review `PROJECT_DESIGN.md` for architecture details
-5. Check `SECURITY.md` for security considerations
+5. Review `PROJECT_DESIGN.md` for architecture details
+6. Check `SECURITY.md` for security considerations
 
 ---
 
