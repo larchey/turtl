@@ -96,7 +96,10 @@ pub(crate) fn ml_dsa_keygen_internal(
                 let reconstructed = (t1[i].coeffs[j] << d) + t0[i].coeffs[j];
                 let original = t[i].coeffs[j];
                 if reconstructed != original {
-                    println!("WARNING: Power2Round decomposition mismatch at [{},{}]:", i, j);
+                    println!(
+                        "WARNING: Power2Round decomposition mismatch at [{},{}]:",
+                        i, j
+                    );
                     println!("  t_original = {}", original);
                     println!("  t1 = {}, t0 = {}", t1[i].coeffs[j], t0[i].coeffs[j]);
                     println!("  t1*2^d + t0 = {}", reconstructed);
@@ -106,7 +109,10 @@ pub(crate) fn ml_dsa_keygen_internal(
             }
         }
         let expected_bound = 1i32 << (d - 1);
-        println!("t0 range: [{}, {}], expected: [{}, {}]", min_t0, max_t0, -expected_bound, expected_bound);
+        println!(
+            "t0 range: [{}, {}], expected: [{}, {}]",
+            min_t0, max_t0, -expected_bound, expected_bound
+        );
         if min_t0 < -expected_bound || max_t0 > expected_bound {
             println!("WARNING: t0 values outside expected range!");
         }
@@ -833,8 +839,10 @@ fn sample_bounded_poly(seed: &[u8], eta: usize) -> Result<Polynomial> {
     }
 
     if j < 256 {
-        eprintln!("ERROR: sample_bounded_poly failed after {} iterations, only got {} coefficients",
-            iterations, j);
+        eprintln!(
+            "ERROR: sample_bounded_poly failed after {} iterations, only got {} coefficients",
+            iterations, j
+        );
         eprintln!("  eta={}, threshold={}", eta, 2 * eta + 1);
         return Err(Error::RandomnessError);
     }
@@ -1487,8 +1495,10 @@ fn encode_private_key(
     for i in 0..l.min(2) {
         let min_s1 = s1[i].coeffs.iter().min().unwrap();
         let max_s1 = s1[i].coeffs.iter().max().unwrap();
-        eprintln!("DEBUG_ENCODE: s1[{}] range before encoding: [{}, {}], expected: [-{}, {}]",
-            i, min_s1, max_s1, eta, eta);
+        eprintln!(
+            "DEBUG_ENCODE: s1[{}] range before encoding: [{}, {}], expected: [-{}, {}]",
+            i, min_s1, max_s1, eta, eta
+        );
     }
 
     // Encode s1
