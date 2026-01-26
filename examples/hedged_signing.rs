@@ -89,8 +89,14 @@ fn demo_deterministic() -> Result<(), Box<dyn std::error::Error>> {
     let sig2 = sign(&private_key, message, context, SigningMode::Deterministic)?;
 
     // Display signature bytes (first 16 bytes for brevity)
-    println!("  Signature 1 (first 16 bytes): {}", hex_preview(sig1.as_bytes(), 16));
-    println!("  Signature 2 (first 16 bytes): {}", hex_preview(sig2.as_bytes(), 16));
+    println!(
+        "  Signature 1 (first 16 bytes): {}",
+        hex_preview(sig1.as_bytes(), 16)
+    );
+    println!(
+        "  Signature 2 (first 16 bytes): {}",
+        hex_preview(sig2.as_bytes(), 16)
+    );
 
     // Verify signatures are identical
     if sig1.as_bytes() == sig2.as_bytes() {
@@ -139,8 +145,14 @@ fn demo_hedged() -> Result<(), Box<dyn std::error::Error>> {
     let sig2 = sign(&private_key, message, context, SigningMode::Hedged)?;
 
     // Display signature bytes (first 16 bytes for brevity)
-    println!("  Signature 1 (first 16 bytes): {}", hex_preview(sig1.as_bytes(), 16));
-    println!("  Signature 2 (first 16 bytes): {}", hex_preview(sig2.as_bytes(), 16));
+    println!(
+        "  Signature 1 (first 16 bytes): {}",
+        hex_preview(sig1.as_bytes(), 16)
+    );
+    println!(
+        "  Signature 2 (first 16 bytes): {}",
+        hex_preview(sig2.as_bytes(), 16)
+    );
 
     // Verify signatures are different
     if sig1.as_bytes() != sig2.as_bytes() {
