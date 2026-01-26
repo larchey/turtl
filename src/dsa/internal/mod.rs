@@ -1073,9 +1073,15 @@ fn decompose(poly: &Polynomial, gamma2: usize) -> Result<(Polynomial, Polynomial
     let mut high = Polynomial::new();
     let mut low = Polynomial::new();
 
+    // FIPS 204: HighBits should return values in range [0, m-1] where m = (q-1)/(2*gamma2)
+    // This matches what use_hint does in verification (see line 1225)
+    let q = 8380417; // ML-DSA modulus
+    let mod_value = (q - 1) / (2 * gamma2 as i32);
+
     for i in 0..256 {
         let (h, l) = decompose_coefficient(poly.coeffs[i], gamma2);
-        high.coeffs[i] = h;
+        // Apply modulo to ensure high bits are in correct range [0, m-1]
+        high.coeffs[i] = ((h % mod_value) + mod_value) % mod_value;
         low.coeffs[i] = l;
     }
 
