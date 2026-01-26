@@ -153,7 +153,6 @@ pub(crate) fn encode_private_key_pke(s: &[Polynomial]) -> Result<Vec<u8>> {
     Ok(private_key)
 }
 
-
 /// Decode the public key
 pub(crate) fn decode_public_key(
     public_key: &[u8],
@@ -211,9 +210,7 @@ pub(crate) fn decode_private_key(
     h.copy_from_slice(&private_key[dk_pke_size + ek_pke_size..dk_pke_size + ek_pke_size + 32]);
 
     let mut z = [0u8; 32];
-    z.copy_from_slice(
-        &private_key[dk_pke_size + ek_pke_size + 32..dk_pke_size + ek_pke_size + 64],
-    );
+    z.copy_from_slice(&private_key[dk_pke_size + ek_pke_size + 32..dk_pke_size + ek_pke_size + 64]);
 
     Ok((dk_pke, ek_pke, h, z))
 }

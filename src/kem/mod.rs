@@ -309,7 +309,6 @@ impl PrivateKey {
     ///
     /// This method extracts the embedded public key (ek_pke) from the private key.
     pub fn extract_public_key_bytes(&self) -> Result<Vec<u8>> {
-
         // ML-KEM private key format (FIPS 203):
         // - dk_pke: ByteEncode_12(s) for each polynomial in s (k * 384 bytes)
         // - ek_pke: public key (parameter_set.public_key_size() bytes)
