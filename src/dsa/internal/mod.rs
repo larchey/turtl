@@ -196,7 +196,7 @@ pub(crate) fn ml_dsa_sign_internal(
         }
 
         // Compute c = H(mu || w1)
-        let w1_encoded = encode_w1(&w1)?;
+        let w1_encoded = encode_w1(&w1, gamma2)?;
         let mut c_data = Vec::new();
         c_data.extend_from_slice(&mu);
         c_data.extend_from_slice(&w1_encoded);
@@ -436,22 +436,38 @@ pub(crate) fn ml_dsa_verify_internal(
     let mut c_hat = c.clone();
     ntt_ctx.forward(&mut c_hat)?;
 
-    // Compute Az
-    let az = compute_w(&matrix_a, &z, &ntt_ctx)?;
+    // Compute Az (z must be in [0, q-1] representation for NTT)
+    let mut z_reduced = z.clone();
+    for i in 0..l {
+        z_reduced[i].reduce_modulo(ntt_ctx.modulus);
+    }
+    let az = compute_w(&matrix_a, &z_reduced, &ntt_ctx)?;
 
     // Compute c*t1*2^d
+    // FIPS 204 Algorithm 2, Line 7: w' ← NTT^{-1}(A ◦ NTT(z) - c_hat ◦ NTT(t1·2^d))
+    // Must compute t1*2^d FIRST, then multiply by c in NTT domain
     let mut ct1 = Vec::with_capacity(k);
+    let d = parameter_set.d();
+
     for i in 0..k {
-        let mut t1_hat = t1[i].clone();
-        ntt_ctx.forward(&mut t1_hat)?;
-
-        let mut ct1_i = ntt_ctx.multiply_ntt(&c_hat, &t1_hat)?;
-        ntt_ctx.inverse(&mut ct1_i)?;
-
-        // Multiply by 2^d
+        // Step 1: Compute t1*2^d in coefficient domain
+        let mut t1_2d = Polynomial::new();
         for j in 0..256 {
-            ct1_i.coeffs[j] <<= parameter_set.d();
+            // Multiply by 2^d (left shift)
+            t1_2d.coeffs[j] = t1[i].coeffs[j] << d;
         }
+
+        // Step 2: Reduce modulo q (coefficients should be in [0, q-1])
+        t1_2d.reduce_modulo(ntt_ctx.modulus);
+
+        // Step 3: Transform to NTT domain
+        ntt_ctx.forward(&mut t1_2d)?;
+
+        // Step 4: Multiply by c in NTT domain (c_hat ◦ NTT(t1·2^d))
+        let mut ct1_i = ntt_ctx.multiply_ntt(&c_hat, &t1_2d)?;
+
+        // Step 5: Transform back to coefficient domain
+        ntt_ctx.inverse(&mut ct1_i)?;
 
         ct1.push(ct1_i);
     }
@@ -472,7 +488,7 @@ pub(crate) fn ml_dsa_verify_internal(
     }
 
     // Encode w1
-    let w1_encoded = encode_w1(&w1)?;
+    let w1_encoded = encode_w1(&w1, gamma2)?;
 
     // Compute c' = H(mu || w1)
     let mut c_prime_data = Vec::new();
@@ -481,11 +497,7 @@ pub(crate) fn ml_dsa_verify_internal(
     let c_prime = hash::h_function(&c_prime_data, parameter_set.lambda() / 4);
 
     // Compare c_tilde and c_prime
-    if c_tilde == c_prime {
-        Ok(true)
-    } else {
-        Ok(false)
-    }
+    Ok(c_tilde == c_prime)
 }
 
 /// Internal function for ML-DSA hash-then-sign
@@ -707,7 +719,11 @@ fn sample_bounded_poly(seed: &[u8], eta: usize) -> Result<Polynomial> {
 
     let mut j = 0;
     let mut iterations = 0;
-    let max_iterations = 480; // Safety limit
+    let max_iterations = 1024; // Safety limit - increased for correct rejection sampling
+
+    // FIPS 204: Sample coefficients in [-eta, eta] using rejection sampling
+    // Accept nibble values in [0, 2*eta], which map to [-eta, eta] after subtracting eta
+    let threshold = 2 * eta + 1;
 
     while j < 256 && iterations < max_iterations {
         iterations += 1;
@@ -717,13 +733,13 @@ fn sample_bounded_poly(seed: &[u8], eta: usize) -> Result<Polynomial> {
         let b1 = byte & 0x0F;
         let b2 = byte >> 4;
 
-        // Use rejection sampling
-        if usize::from(b1) < 15 - 5 + 2 * eta + 1 {
+        // Rejection sampling: accept if value in valid range
+        if usize::from(b1) < threshold {
             poly.coeffs[j] = (b1 as i32) - (eta as i32);
             j += 1;
         }
 
-        if j < 256 && usize::from(b2) < 15 - 5 + 2 * eta + 1 {
+        if j < 256 && usize::from(b2) < threshold {
             poly.coeffs[j] = (b2 as i32) - (eta as i32);
             j += 1;
         }
@@ -1094,7 +1110,9 @@ fn use_hint(h: &Polynomial, r: &Polynomial, gamma2: usize) -> Result<Polynomial>
             // Safe modulo with overflow checking
             w1.coeffs[i] = ((adjusted % mod_value) + mod_value) % mod_value;
         } else {
-            w1.coeffs[i] = r1;
+            // FIPS 204 Algorithm 40 line 6: return r1 mod m (not just r1!)
+            // This ensures w1 is always in the correct range [0, m-1]
+            w1.coeffs[i] = ((r1 % mod_value) + mod_value) % mod_value;
         }
     }
 
@@ -1102,15 +1120,14 @@ fn use_hint(h: &Polynomial, r: &Polynomial, gamma2: usize) -> Result<Polynomial>
 }
 
 /// Encode the w1 component for challenge hash
-fn encode_w1(w1: &[Polynomial]) -> Result<Vec<u8>> {
+fn encode_w1(w1: &[Polynomial], gamma2: usize) -> Result<Vec<u8>> {
     let k = w1.len();
-    // For high bits, we need to use up to 12 bits per coefficient for test parameter
-    // and 6 bits for regular parameters
-    #[cfg(test)]
-    let bits_per_coeff = 12;
+    let q = 8380417; // ML-DSA modulus
 
-    #[cfg(not(test))]
-    let bits_per_coeff = 6;
+    // FIPS 204 Algorithm 23: w1Encode
+    // Compute m = (q-1)/(2*gamma2) and use bitlen(m-1) bits per coefficient
+    let m = (q - 1) / (2 * gamma2 as i32);
+    let bits_per_coeff = bitlen((m - 1) as u32);
 
     // Calculate number of bytes needed per polynomial
     let bytes_per_poly = (256_usize * bits_per_coeff).div_ceil(8);
@@ -1124,52 +1141,24 @@ fn encode_w1(w1: &[Polynomial]) -> Result<Vec<u8>> {
             // Get the coefficient as a non-negative value
             let coeff_raw = w1[i].coeffs[j];
 
-            // Handle negative values
-            #[cfg(test)]
-            let coeff = if coeff_raw < 0 {
-                // For tests, use a different encoding for negative values
-                // to prevent overflow issues with unsigned_abs
-                // Map negative values to 0-2047 range, positive to 2048-4095
-                (2048 + coeff_raw) as u32 & 0xFFF
-            } else {
-                // For positive values, just use the value directly
-                coeff_raw as u32 & 0xFFF
-            };
+            // According to FIPS 204, w1 coefficients should always be non-negative
+            // They are in the range [0, m-1] where m = (q-1)/(2*gamma2)
+            if coeff_raw < 0 {
+                return Err(Error::EncodingError(format!(
+                    "w1 coefficient must be non-negative, got: {}",
+                    coeff_raw
+                )));
+            }
 
-            #[cfg(not(test))]
-            // Handle negative values by using absolute value
-            let coeff = coeff_raw.unsigned_abs();
-
-            // We need to ensure the coefficient is within the expected range
-            #[cfg(test)]
-            let max_coeff = (1 << bits_per_coeff) - 1;
-
-            #[cfg(not(test))]
+            let coeff = coeff_raw as u32;
             let max_coeff = (1 << bits_per_coeff) - 1;
 
             // Check if coefficient is too large
             if coeff > max_coeff {
-                #[cfg(test)]
-                {
-                    // In test mode, clamp the value rather than failing
-                    let clamped = max_coeff;
-
-                    // Store clamped coefficient in bits_per_coeff bits
-                    for b in 0..bits_per_coeff {
-                        bits.push(((clamped >> b) & 1) as u8);
-                    }
-
-                    // Continue to next coefficient
-                    continue;
-                }
-
-                #[cfg(not(test))]
-                {
-                    return Err(Error::EncodingError(format!(
-                        "Coefficient out of range for w1 encoding: {}",
-                        coeff
-                    )));
-                }
+                return Err(Error::EncodingError(format!(
+                    "Coefficient out of range for w1 encoding: {} (max {})",
+                    coeff, max_coeff
+                )));
             }
 
             // Store coefficient in bits_per_coeff bits
