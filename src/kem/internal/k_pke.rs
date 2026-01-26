@@ -4,7 +4,7 @@
 //! used as a component within ML-KEM, following FIPS 203 Algorithms 12-14.
 
 use crate::common::ntt::NTTType;
-use crate::common::{hash, ntt::NTTContext, poly::Polynomial};
+use crate::common::{ntt::NTTContext, poly::Polynomial};
 use crate::error::{Error, Result};
 use crate::kem::ParameterSet;
 
@@ -533,7 +533,7 @@ fn byte_encode_12(poly: &Polynomial) -> Result<Vec<u8>> {
         }
         coeff = coeff.rem_euclid(3329);
 
-        if coeff < 0 || coeff >= 3329 {
+        if !(0..3329).contains(&coeff) {
             return Err(Error::EncodingError(format!(
                 "Coefficient out of range: {}",
                 coeff
