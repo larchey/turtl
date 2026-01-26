@@ -854,20 +854,34 @@ fn compute_public_t(
 /// Split t into high and low bits (Power2Round)
 fn power2round(t: &[Polynomial], d: usize) -> Result<(Vec<Polynomial>, Vec<Polynomial>)> {
     let k = t.len();
+    let _q = 8380417; // ML-DSA modulus
 
     let mut t1 = Vec::with_capacity(k);
     let mut t0 = Vec::with_capacity(k);
+
+    // FIPS 204 Algorithm 34: Power2Round(r, d)
+    // r1 ← ⌊(r + 2^(d−1))/2^d⌋ (rounding before division)
+    // r0 ← r − r1 · 2^d
+    let rounding_offset = 1i32 << (d - 1); // 2^(d-1)
 
     for i in 0..k {
         let mut t1_i = Polynomial::new();
         let mut t0_i = Polynomial::new();
 
         for j in 0..256 {
-            // Compute t1 = ⌊t/2^d⌋
-            t1_i.coeffs[j] = t[i].coeffs[j] >> d;
+            // FIPS 204 Algorithm 34: Power2Round
+            // Input: r ∈ [0, q-1]
+            // r1 ← ⌊(r + 2^(d−1))/2^d⌋
+            // r0 ← r − r1 · 2^d
+            // Note: r0 should be in centered form [-2^(d-1), 2^(d-1)]
 
-            // Compute t0 = t - t1*2^d
-            t0_i.coeffs[j] = t[i].coeffs[j] - (t1_i.coeffs[j] << d);
+            let t_val = t[i].coeffs[j];
+
+            // t1 = ⌊(t + 2^(d−1))/2^d⌋ using integer arithmetic
+            t1_i.coeffs[j] = (t_val + rounding_offset) >> d;
+
+            // t0 = t - t1*2^d (can be negative, keep in centered form)
+            t0_i.coeffs[j] = t_val - (t1_i.coeffs[j] << d);
         }
 
         t1.push(t1_i);
@@ -1415,8 +1429,10 @@ fn encode_private_key(
     #[cfg(test)]
     let s_size = (l + k) * (256 * _s_bits_per_coeff).div_ceil(8);
 
-    let t0_max_value = (1 << d) - 1;
-    let t0_bits_per_coeff = bitlen(t0_max_value);
+    // t0 is in range [-2^(d-1), 2^(d-1)], so max absolute value is 2^(d-1)
+    let t0_max_abs = 1 << (d - 1); // 2^(d-1)
+    #[cfg(test)]
+    let t0_bits_per_coeff = bitlen(2 * t0_max_abs);
     #[cfg(test)]
     let t0_size = k * (256 * t0_bits_per_coeff).div_ceil(8);
 
@@ -1454,9 +1470,9 @@ fn encode_private_key(
         private_key.extend_from_slice(&encoded);
     }
 
-    // Encode t0
+    // Encode t0 (centered representation [-2^(d-1), 2^(d-1)])
     for i in 0..k {
-        let encoded = encode_poly(&t0[i], t0_bits_per_coeff, t0_max_value)?;
+        let encoded = encode_poly_signed(&t0[i], t0_max_abs as usize, t0_max_abs as usize)?;
         private_key.extend_from_slice(&encoded);
     }
 
@@ -1545,8 +1561,9 @@ fn decode_private_key(
     let _s_bits_per_coeff = bitlen(2 * s_max_value);
     let s_bytes_per_poly = (256 * _s_bits_per_coeff).div_ceil(8);
 
-    let t0_max_value = (1 << d) - 1;
-    let t0_bits_per_coeff = bitlen(t0_max_value);
+    // t0 is in range [-2^(d-1), 2^(d-1)]
+    let t0_max_abs = (1 << (d - 1)) as u32; // 2^(d-1)
+    let t0_bits_per_coeff = bitlen(2 * t0_max_abs);
     let t0_bytes_per_poly = (256 * t0_bits_per_coeff).div_ceil(8);
 
     // Check if private key has enough bytes
@@ -1600,17 +1617,17 @@ fn decode_private_key(
         offset += s_bytes_per_poly;
     }
 
-    // Decode t0
+    // Decode t0 (signed, centered representation)
     let mut t0 = Vec::with_capacity(k);
     for _ in 0..k {
         if offset + t0_bytes_per_poly > private_key_bytes.len() {
             return Err(Error::InvalidPrivateKey);
         }
 
-        let poly = decode_poly(
+        let poly = decode_poly_signed(
             &private_key_bytes[offset..offset + t0_bytes_per_poly],
-            t0_bits_per_coeff,
-            t0_max_value,
+            t0_max_abs as usize,
+            t0_max_abs as usize,
         )?;
         t0.push(poly);
         offset += t0_bytes_per_poly;
