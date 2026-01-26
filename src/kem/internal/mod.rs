@@ -49,20 +49,26 @@ pub(crate) fn ml_kem_keygen_internal(
     rhoprime.copy_from_slice(&expanded[32..96]);
     key_seed.copy_from_slice(&expanded[96..128]);
 
-    // 2-4. Generate matrix A, vectors s1 and s2
-    let (matrix_a, s1, s2) = k_pke::generate_key_components(&rho, &rhoprime, parameter_set)?;
+    // 2-4. Generate matrix A, secret vector s, and error vector e
+    let (matrix_a, s, e) = k_pke::generate_key_components(&rho, &rhoprime, parameter_set)?;
 
-    // 5. Compute t = As1 + s2
-    let t = k_pke::compute_public_t(&matrix_a, &s1, &s2)?;
+    // 5. Compute t = A·s + e
+    let t = k_pke::compute_public_t(&matrix_a, &s, &e)?;
 
-    // 6. Compress t
-    let (t1, t0) = k_pke::power2round(&t, parameter_set)?;
+    // 6-7. Encode the public key: ek_pke = ρ || ByteEncode_12(t)
+    let public_key_bytes = k_pke::encode_public_key(&rho, &t, parameter_set)?;
 
-    // 7-10. Encode the keys
-    let public_key_bytes = k_pke::encode_public_key(&rho, &t1, parameter_set)?;
-    let tr = hash::h_function(&public_key_bytes, 64);
-    let private_key_bytes =
-        k_pke::encode_private_key(&rho, &key_seed, &tr, &s1, &s2, &t0, parameter_set)?;
+    // 8. Compute H(ek_pke) - SHA3-256 hash (32 bytes)
+    let tr = hash::h_function(&public_key_bytes, 32);
+
+    // 9-10. Encode the private key: dk_pke || ek_pke || H(ek_pke) || z
+    // where dk_pke = ByteEncode_12(s)
+    let dk_pke = k_pke::encode_private_key_pke(&s)?;
+    let mut private_key_bytes = Vec::new();
+    private_key_bytes.extend(&dk_pke);
+    private_key_bytes.extend(&public_key_bytes);
+    private_key_bytes.extend(&tr);
+    private_key_bytes.extend(&key_seed);
 
     Ok((public_key_bytes, private_key_bytes))
 }
