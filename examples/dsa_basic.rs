@@ -115,9 +115,18 @@ fn demo_dsa_44() -> Result<(), Box<dyn std::error::Error>> {
 
     // Display key and signature sizes
     println!("\n4. Size Summary:");
-    println!("   Public key:  {:4} bytes", ParameterSet::MlDsa44.public_key_size());
-    println!("   Private key: {:4} bytes", ParameterSet::MlDsa44.private_key_size());
-    println!("   Signature:   {:4} bytes", ParameterSet::MlDsa44.signature_size());
+    println!(
+        "   Public key:  {:4} bytes",
+        ParameterSet::MlDsa44.public_key_size()
+    );
+    println!(
+        "   Private key: {:4} bytes",
+        ParameterSet::MlDsa44.private_key_size()
+    );
+    println!(
+        "   Signature:   {:4} bytes",
+        ParameterSet::MlDsa44.signature_size()
+    );
 
     Ok(())
 }
@@ -166,9 +175,18 @@ fn demo_dsa_65() -> Result<(), Box<dyn std::error::Error>> {
 
     // Display key and signature sizes
     println!("\n4. Size Summary:");
-    println!("   Public key:  {:4} bytes", ParameterSet::MlDsa65.public_key_size());
-    println!("   Private key: {:4} bytes", ParameterSet::MlDsa65.private_key_size());
-    println!("   Signature:   {:4} bytes", ParameterSet::MlDsa65.signature_size());
+    println!(
+        "   Public key:  {:4} bytes",
+        ParameterSet::MlDsa65.public_key_size()
+    );
+    println!(
+        "   Private key: {:4} bytes",
+        ParameterSet::MlDsa65.private_key_size()
+    );
+    println!(
+        "   Signature:   {:4} bytes",
+        ParameterSet::MlDsa65.signature_size()
+    );
 
     Ok(())
 }
@@ -220,9 +238,18 @@ fn demo_dsa_87() -> Result<(), Box<dyn std::error::Error>> {
 
     // Display key and signature sizes
     println!("\n4. Size Summary:");
-    println!("   Public key:  {:4} bytes", ParameterSet::MlDsa87.public_key_size());
-    println!("   Private key: {:4} bytes", ParameterSet::MlDsa87.private_key_size());
-    println!("   Signature:   {:4} bytes", ParameterSet::MlDsa87.signature_size());
+    println!(
+        "   Public key:  {:4} bytes",
+        ParameterSet::MlDsa87.public_key_size()
+    );
+    println!(
+        "   Private key: {:4} bytes",
+        ParameterSet::MlDsa87.private_key_size()
+    );
+    println!(
+        "   Signature:   {:4} bytes",
+        ParameterSet::MlDsa87.signature_size()
+    );
 
     Ok(())
 }
