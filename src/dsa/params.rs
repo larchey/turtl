@@ -197,9 +197,9 @@ impl ParameterSet {
     /// Defined in FIPS 204 as (q-1)/alpha where alpha=88 for ML-DSA-44 and alpha=32 for ML-DSA-65/87
     pub fn gamma2(&self) -> usize {
         match self {
-            Self::MlDsa44 => 95268,  // Exact value: (8380417 - 1) / 88
-            Self::MlDsa65 => 261888, // Exact value: (8380417 - 1) / 32
-            Self::MlDsa87 => 261888, // Exact value: (8380417 - 1) / 32
+            Self::MlDsa44 => 95232,  // Exact value: (8380417 - 1) / 88 = 95232
+            Self::MlDsa65 => 261888, // Exact value: (8380417 - 1) / 32 = 261888
+            Self::MlDsa87 => 261888, // Exact value: (8380417 - 1) / 32 = 261888
             #[cfg(test)]
             Self::TestSmall => 4190, // Using a much smaller value for testing
         }
