@@ -2,7 +2,7 @@
 //!
 //! This module defines the parameter sets for ML-KEM as specified in NIST FIPS 203.
 //!
-//! ML-KEM is defined over a polynomial ring R_q = Z_q[X]/(X^n + 1) where:
+//! ML-KEM is defined over a polynomial ring R_q = Z_q\[X\]/(X^n + 1) where:
 //! - n = 256 (the polynomial degree)
 //! - q = 3329 (the modulus)
 //!
@@ -12,15 +12,95 @@
 // We'll bring in Copy, Default, and Sized which ParameterSet already implements
 use zeroize::Zeroize;
 
-/// ML-KEM parameter sets
+/// ML-KEM parameter sets as defined in FIPS 203.
+///
+/// Each parameter set provides a different security level and has different key,
+/// ciphertext, and computational costs.
+///
+/// # Security Categories
+///
+/// NIST defines security categories that roughly correspond to the computational
+/// effort required to break symmetric cryptographic algorithms:
+///
+/// - Category 1: Comparable to AES-128 (112-128 bits of security)
+/// - Category 3: Comparable to AES-192 (160-192 bits of security)
+/// - Category 5: Comparable to AES-256 (224-256 bits of security)
+///
+/// # Choosing a Parameter Set
+///
+/// - Use **ML-KEM-512** when you need smaller keys/ciphertexts and security equivalent to AES-128
+/// - Use **ML-KEM-768** for a balance of security and performance (recommended for most applications)
+/// - Use **ML-KEM-1024** when you need the highest security level equivalent to AES-256
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum ParameterSet {
-    /// ML-KEM-512 (Security Category 1)
+    /// ML-KEM-512 (Security Category 1, equivalent to AES-128).
+    ///
+    /// # Specifications
+    ///
+    /// - Security Category: 1
+    /// - Public key size: 800 bytes
+    /// - Private key size: 1632 bytes
+    /// - Ciphertext size: 768 bytes
+    /// - Shared secret size: 32 bytes
+    /// - Matrix dimension (k): 2
+    ///
+    /// # When to Use
+    ///
+    /// Choose this parameter set when:
+    /// - You need smaller key and ciphertext sizes
+    /// - AES-128 equivalent security is sufficient
+    /// - Bandwidth or storage is constrained
+    ///
+    /// # Reference
+    ///
+    /// FIPS 203 Table 2
     #[default]
     MlKem512,
-    /// ML-KEM-768 (Security Category 3)
+
+    /// ML-KEM-768 (Security Category 3, equivalent to AES-192).
+    ///
+    /// # Specifications
+    ///
+    /// - Security Category: 3
+    /// - Public key size: 1184 bytes
+    /// - Private key size: 2400 bytes
+    /// - Ciphertext size: 1088 bytes
+    /// - Shared secret size: 32 bytes
+    /// - Matrix dimension (k): 3
+    ///
+    /// # When to Use
+    ///
+    /// Choose this parameter set when:
+    /// - You want a balance between security and performance
+    /// - AES-192 equivalent security is desired
+    /// - This is the recommended default for most applications
+    ///
+    /// # Reference
+    ///
+    /// FIPS 203 Table 2
     MlKem768,
-    /// ML-KEM-1024 (Security Category 5)
+
+    /// ML-KEM-1024 (Security Category 5, equivalent to AES-256).
+    ///
+    /// # Specifications
+    ///
+    /// - Security Category: 5
+    /// - Public key size: 1568 bytes
+    /// - Private key size: 3168 bytes
+    /// - Ciphertext size: 1568 bytes
+    /// - Shared secret size: 32 bytes
+    /// - Matrix dimension (k): 4
+    ///
+    /// # When to Use
+    ///
+    /// Choose this parameter set when:
+    /// - You need the highest security level
+    /// - AES-256 equivalent security is required
+    /// - You can afford larger keys and ciphertexts
+    ///
+    /// # Reference
+    ///
+    /// FIPS 203 Table 2
     MlKem1024,
 }
 
@@ -36,12 +116,24 @@ impl Zeroize for ZeroizeParameterSet {
 }
 
 impl ParameterSet {
-    /// Get the polynomial ring degree n, which is fixed at 256 for all parameter sets
+    /// Get the polynomial ring degree n.
+    ///
+    /// Returns 256 for all ML-KEM parameter sets as specified in FIPS 203.
+    ///
+    /// # Reference
+    ///
+    /// FIPS 203 Section 4.1
     pub fn n(&self) -> usize {
         256 // Same for all ML-KEM parameter sets per FIPS 203
     }
 
-    /// Get the NIST security category
+    /// Get the NIST security category.
+    ///
+    /// Returns the security category (1, 3, or 5) which indicates the computational
+    /// effort required to break the cryptosystem, roughly equivalent to:
+    /// - Category 1: AES-128
+    /// - Category 3: AES-192
+    /// - Category 5: AES-256
     pub fn security_category(&self) -> usize {
         match self {
             Self::MlKem512 => 1,
@@ -50,12 +142,30 @@ impl ParameterSet {
         }
     }
 
-    /// Get the modulus q for ML-KEM
+    /// Get the modulus q for ML-KEM.
+    ///
+    /// Returns 3329 for all ML-KEM parameter sets as specified in FIPS 203.
+    ///
+    /// # Reference
+    ///
+    /// FIPS 203 Section 4.1
     pub fn q(&self) -> i32 {
         3329 // Same for all ML-KEM parameter sets per FIPS 203
     }
 
-    /// Get the value of parameter k (matrix dimension)
+    /// Get the value of parameter k (matrix dimension).
+    ///
+    /// The matrix A in ML-KEM is k×k, and this parameter determines the
+    /// security level and sizes of keys and ciphertexts.
+    ///
+    /// Returns:
+    /// - 2 for ML-KEM-512
+    /// - 3 for ML-KEM-768
+    /// - 4 for ML-KEM-1024
+    ///
+    /// # Reference
+    ///
+    /// FIPS 203 Table 2
     pub fn k(&self) -> usize {
         match self {
             Self::MlKem512 => 2,

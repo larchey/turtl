@@ -1,11 +1,11 @@
 //! Polynomial operations for ML-KEM and ML-DSA.
 //!
 //! This module implements basic polynomial arithmetic in the ring
-//! ℤq[X]/(X^256 + 1) used by both ML-KEM and ML-DSA.
+//! ℤq\[X\]/(X^256 + 1) used by both ML-KEM and ML-DSA.
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-/// A polynomial in the ring ℤq[X]/(X^256 + 1)
+/// A polynomial in the ring ℤq\[X\]/(X^256 + 1)
 #[derive(Clone, Debug)]
 pub struct Polynomial {
     /// Coefficients of the polynomial
