@@ -128,10 +128,7 @@ fn test_ntt_roundtrip_mldsa() {
 /// Test roundtrip with small coefficients (common in cryptographic usage)
 #[test]
 fn test_ntt_roundtrip_small_coefficients() {
-    let test_cases = vec![
-        (NTTType::MLKEM, 3329),
-        (NTTType::MLDSA, 8380417),
-    ];
+    let test_cases = vec![(NTTType::MLKEM, 3329), (NTTType::MLDSA, 8380417)];
 
     for (ntt_type, modulus) in test_cases {
         let ctx = NTTContext::new(ntt_type);
@@ -162,10 +159,7 @@ fn test_ntt_roundtrip_small_coefficients() {
 /// Test that NTT of zero polynomial is zero polynomial
 #[test]
 fn test_ntt_zero_polynomial() {
-    let test_cases = vec![
-        (NTTType::MLKEM, "ML-KEM"),
-        (NTTType::MLDSA, "ML-DSA"),
-    ];
+    let test_cases = vec![(NTTType::MLKEM, "ML-KEM"), (NTTType::MLDSA, "ML-DSA")];
 
     for (ntt_type, name) in test_cases {
         let ctx = NTTContext::new(ntt_type);
@@ -188,10 +182,7 @@ fn test_ntt_zero_polynomial() {
 /// Tests that the NTT handles sparse polynomials correctly
 #[test]
 fn test_ntt_identity() {
-    let test_cases = vec![
-        (NTTType::MLKEM, 3329),
-        (NTTType::MLDSA, 8380417),
-    ];
+    let test_cases = vec![(NTTType::MLKEM, 3329), (NTTType::MLDSA, 8380417)];
 
     for (ntt_type, modulus) in test_cases {
         let ctx = NTTContext::new(ntt_type);
@@ -207,7 +198,9 @@ fn test_ntt_identity() {
             assert!(
                 poly.coeffs[i] >= 0 && poly.coeffs[i] < modulus,
                 "{:?}: NTT coefficient out of range at index {}: {}",
-                ntt_type, i, poly.coeffs[i]
+                ntt_type,
+                i,
+                poly.coeffs[i]
             );
         }
 
@@ -224,10 +217,7 @@ fn test_ntt_identity() {
 /// Test NTT of polynomial with all coefficients = 1
 #[test]
 fn test_ntt_all_ones() {
-    let test_cases = vec![
-        (NTTType::MLKEM, 3329),
-        (NTTType::MLDSA, 8380417),
-    ];
+    let test_cases = vec![(NTTType::MLKEM, 3329), (NTTType::MLDSA, 8380417)];
 
     for (ntt_type, modulus) in test_cases {
         let ctx = NTTContext::new(ntt_type);
@@ -245,7 +235,9 @@ fn test_ntt_all_ones() {
             assert!(
                 poly.coeffs[i] >= 0 && poly.coeffs[i] < modulus,
                 "{:?}: NTT coefficient out of range at index {}: {}",
-                ntt_type, i, poly.coeffs[i]
+                ntt_type,
+                i,
+                poly.coeffs[i]
             );
         }
 
@@ -262,10 +254,7 @@ fn test_ntt_all_ones() {
 /// Test NTT with maximum coefficient values (q-1)
 #[test]
 fn test_ntt_maximum_coefficients() {
-    let test_cases = vec![
-        (NTTType::MLKEM, 3329),
-        (NTTType::MLDSA, 8380417),
-    ];
+    let test_cases = vec![(NTTType::MLKEM, 3329), (NTTType::MLDSA, 8380417)];
 
     for (ntt_type, modulus) in test_cases {
         let ctx = NTTContext::new(ntt_type);
@@ -283,7 +272,9 @@ fn test_ntt_maximum_coefficients() {
             assert!(
                 poly.coeffs[i] >= 0 && poly.coeffs[i] < modulus,
                 "{:?}: NTT coefficient out of range at index {}: {}",
-                ntt_type, i, poly.coeffs[i]
+                ntt_type,
+                i,
+                poly.coeffs[i]
             );
         }
 
@@ -304,10 +295,7 @@ fn test_ntt_maximum_coefficients() {
 /// Test that NTT is linear: NTT(a + b) == NTT(a) + NTT(b)
 #[test]
 fn test_ntt_linearity() {
-    let test_cases = vec![
-        (NTTType::MLKEM, 3329),
-        (NTTType::MLDSA, 8380417),
-    ];
+    let test_cases = vec![(NTTType::MLKEM, 3329), (NTTType::MLDSA, 8380417)];
 
     for (ntt_type, modulus) in test_cases {
         let ctx = NTTContext::new(ntt_type);
@@ -339,10 +327,7 @@ fn test_ntt_linearity() {
 /// Test that NTT preserves scalar multiplication: NTT(k*a) == k*NTT(a)
 #[test]
 fn test_ntt_scalar_mult() {
-    let test_cases = vec![
-        (NTTType::MLKEM, 3329, 7),
-        (NTTType::MLDSA, 8380417, 13),
-    ];
+    let test_cases = vec![(NTTType::MLKEM, 3329, 7), (NTTType::MLDSA, 8380417, 13)];
 
     for (ntt_type, modulus, scalar) in test_cases {
         let ctx = NTTContext::new(ntt_type);
@@ -377,10 +362,7 @@ fn test_ntt_scalar_mult() {
 /// Test that NTT output coefficients are always in range [0, q-1]
 #[test]
 fn test_ntt_output_bounds() {
-    let test_cases = vec![
-        (NTTType::MLKEM, 3329),
-        (NTTType::MLDSA, 8380417),
-    ];
+    let test_cases = vec![(NTTType::MLKEM, 3329), (NTTType::MLDSA, 8380417)];
 
     for (ntt_type, modulus) in test_cases {
         let ctx = NTTContext::new(ntt_type);
@@ -419,10 +401,7 @@ fn test_ntt_output_bounds() {
 /// produced wildly incorrect outputs (millions instead of reasonable values)
 #[test]
 fn test_ntt_small_input() {
-    let test_cases = vec![
-        (NTTType::MLKEM, 3329),
-        (NTTType::MLDSA, 8380417),
-    ];
+    let test_cases = vec![(NTTType::MLKEM, 3329), (NTTType::MLDSA, 8380417)];
 
     for (ntt_type, modulus) in test_cases {
         let ctx = NTTContext::new(ntt_type);
@@ -443,7 +422,9 @@ fn test_ntt_small_input() {
             assert!(
                 poly.coeffs[i] >= 0 && poly.coeffs[i] < modulus,
                 "{:?}: NTT of small input produced out-of-range coefficient at index {}: {}",
-                ntt_type, i, poly.coeffs[i]
+                ntt_type,
+                i,
+                poly.coeffs[i]
             );
         }
 
@@ -460,10 +441,7 @@ fn test_ntt_small_input() {
 /// Test constant polynomial (all coefficients the same)
 #[test]
 fn test_ntt_constant_polynomial() {
-    let test_cases = vec![
-        (NTTType::MLKEM, 3329, 42),
-        (NTTType::MLDSA, 8380417, 123),
-    ];
+    let test_cases = vec![(NTTType::MLKEM, 3329, 42), (NTTType::MLDSA, 8380417, 123)];
 
     for (ntt_type, modulus, constant) in test_cases {
         let ctx = NTTContext::new(ntt_type);
@@ -482,7 +460,9 @@ fn test_ntt_constant_polynomial() {
             assert!(
                 poly.coeffs[i] >= 0 && poly.coeffs[i] < modulus,
                 "{:?}: NTT coefficient out of range at index {}: {}",
-                ntt_type, i, poly.coeffs[i]
+                ntt_type,
+                i,
+                poly.coeffs[i]
             );
         }
 
@@ -562,10 +542,7 @@ fn test_ntt_fips204_vectors() {
 /// Verify: INTT(NTT(a) * NTT(b)) gives correct polynomial product
 #[test]
 fn test_ntt_multiplication_correctness() {
-    let test_cases = vec![
-        (NTTType::MLKEM, 3329),
-        (NTTType::MLDSA, 8380417),
-    ];
+    let test_cases = vec![(NTTType::MLKEM, 3329), (NTTType::MLDSA, 8380417)];
 
     for (ntt_type, modulus) in test_cases {
         let ctx = NTTContext::new(ntt_type);
@@ -587,7 +564,9 @@ fn test_ntt_multiplication_correctness() {
         ctx.forward(&mut b_ntt).expect("Forward NTT failed");
 
         // Multiply in NTT domain
-        let mut product = ctx.multiply_ntt(&a_ntt, &b_ntt).expect("NTT multiplication failed");
+        let mut product = ctx
+            .multiply_ntt(&a_ntt, &b_ntt)
+            .expect("NTT multiplication failed");
 
         // Transform back
         ctx.inverse(&mut product).expect("Inverse NTT failed");
@@ -597,7 +576,9 @@ fn test_ntt_multiplication_correctness() {
             assert!(
                 product.coeffs[i] >= 0 && product.coeffs[i] < modulus,
                 "{:?}: Product coefficient out of range at index {}: {}",
-                ntt_type, i, product.coeffs[i]
+                ntt_type,
+                i,
+                product.coeffs[i]
             );
         }
     }
@@ -606,10 +587,7 @@ fn test_ntt_multiplication_correctness() {
 /// Test commutativity of NTT multiplication: NTT(a)*NTT(b) == NTT(b)*NTT(a)
 #[test]
 fn test_ntt_multiplication_commutative() {
-    let test_cases = vec![
-        (NTTType::MLKEM, 3329),
-        (NTTType::MLDSA, 8380417),
-    ];
+    let test_cases = vec![(NTTType::MLKEM, 3329), (NTTType::MLDSA, 8380417)];
 
     for (ntt_type, modulus) in test_cases {
         let ctx = NTTContext::new(ntt_type);
@@ -628,7 +606,9 @@ fn test_ntt_multiplication_commutative() {
 
         // Compute a*b and b*a
         let mut ab = ctx.multiply_ntt(&a, &b).expect("Multiplication failed");
-        let mut ba = ctx.multiply_ntt(&b_copy, &a_copy).expect("Multiplication failed");
+        let mut ba = ctx
+            .multiply_ntt(&b_copy, &a_copy)
+            .expect("Multiplication failed");
 
         // Transform back
         ctx.inverse(&mut ab).expect("Inverse NTT failed");
