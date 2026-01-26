@@ -360,7 +360,10 @@ pub(crate) fn ml_dsa_sign_internal(
 
         println!("\n=== SIGNING SUCCESS (attempt {}) ===", kappa);
         println!("  w[0] (first 10): {:?}", &w[0].coeffs[0..10]);
-        println!("  w_prime_signing[0] (first 10): {:?}", &w_prime_for_hints[0].coeffs[0..10]);
+        println!(
+            "  w_prime_signing[0] (first 10): {:?}",
+            &w_prime_for_hints[0].coeffs[0..10]
+        );
         println!("  w1[0] (first 10): {:?}", &w1[0].coeffs[0..10]);
         println!("  c_tilde (first 10): {:?}", &c_tilde[0..10]);
 
@@ -485,14 +488,20 @@ pub(crate) fn ml_dsa_verify_internal(
         }
 
         if i == 0 {
-            println!("  t1*2^d before reduce (first 10): {:?}", &t1_2d.coeffs[0..10]);
+            println!(
+                "  t1*2^d before reduce (first 10): {:?}",
+                &t1_2d.coeffs[0..10]
+            );
         }
 
         // Step 2: Reduce modulo q (coefficients should be in [0, q-1])
         t1_2d.reduce_modulo(ntt_ctx.modulus);
 
         if i == 0 {
-            println!("  t1*2^d after reduce (first 10): {:?}", &t1_2d.coeffs[0..10]);
+            println!(
+                "  t1*2^d after reduce (first 10): {:?}",
+                &t1_2d.coeffs[0..10]
+            );
         }
 
         // Step 3: Transform to NTT domain
