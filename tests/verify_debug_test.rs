@@ -85,7 +85,10 @@ fn test_ntt_multiply_vs_naive() {
         println!("Total mismatches: {}/256", mismatches);
     }
 
-    assert_eq!(mismatches, 0, "NTT multiplication does not match naive multiplication");
+    assert_eq!(
+        mismatches, 0,
+        "NTT multiplication does not match naive multiplication"
+    );
 }
 
 /// Test that NTT multiply works correctly for accumulated matrix-vector product
@@ -176,14 +179,17 @@ fn test_ntt_matrix_vector_product() {
         println!("Total mismatches: {}/256", mismatches);
     }
 
-    assert_eq!(mismatches, 0, "NTT matrix-vector product does not match naive computation");
+    assert_eq!(
+        mismatches, 0,
+        "NTT matrix-vector product does not match naive computation"
+    );
 }
 
 /// Verify Montgomery constants
 #[test]
 fn test_montgomery_constants() {
     let ntt_ctx = NTTContext::new(NTTType::MLDSA);
-    let q = ntt_ctx.modulus as i64;  // 8380417
+    let q = ntt_ctx.modulus as i64; // 8380417
 
     // Check: qinv * q ≡ 1 (mod 2^32)
     let qinv = ntt_ctx.qinv as i64;
