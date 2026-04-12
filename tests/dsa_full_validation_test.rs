@@ -1,4 +1,4 @@
-//! PULSE Step 0d — Comprehensive turtl validation
+//! Comprehensive ML-DSA validation across all parameter sets.
 //!
 //! Tests all ML-DSA parameter sets (44, 65, 87) for:
 //! - Keypair generation produces non-empty, distinct keys
@@ -168,11 +168,11 @@ fn test_full_validation(param: ParameterSet, name: &str) {
 
     // Test 14: Multiple sequential sign/verify cycles (stress test)
     for i in 0..10 {
-        let cycle_msg = format!("PULSE telemetry packet #{}", i);
+        let cycle_msg = format!("telemetry packet #{}", i);
         let cycle_sig = dsa::sign(&sk, cycle_msg.as_bytes(), b"", SigningMode::Hedged)
-            .expect(&format!("cycle {} sign failed", i));
+            .unwrap_or_else(|_| panic!("cycle {} sign failed", i));
         let result = dsa::verify(&pk, cycle_msg.as_bytes(), &cycle_sig, b"")
-            .expect(&format!("cycle {} verify failed", i));
+            .unwrap_or_else(|_| panic!("cycle {} verify failed", i));
         assert!(result, "Cycle {} failed verification", i);
     }
     eprintln!("[PASS] 10 sequential sign/verify cycles");

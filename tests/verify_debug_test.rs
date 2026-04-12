@@ -1,3 +1,5 @@
+#![allow(clippy::needless_range_loop)]
+
 use turtl::common::ntt::{NTTContext, NTTType};
 use turtl::common::poly::Polynomial;
 

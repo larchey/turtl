@@ -1,7 +1,6 @@
-//! PULSE Step 0e — Performance baseline for turtl ML-DSA
+//! ML-DSA performance baseline.
 //!
 //! Records signing and verification times for all three parameter sets.
-//! This is the first benchmark data point for the research paper.
 
 use std::time::Instant;
 use turtl::dsa::{self, ParameterSet, SigningMode};
