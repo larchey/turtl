@@ -60,40 +60,38 @@ fn test_mldsa_ntt_roundtrip() {
     );
 }
 
-// NOTE: Ignored due to known ML-DSA NTT implementation bug (TODO.md line 10)
-// This test detects that NTT produces huge coefficients for small inputs,
-// which is the root cause of signature generation failures.
+/// In Z_q[X]/(X^256+1), the NTT evaluates polynomials at roots of unity.
+/// A constant polynomial f(x)=2 evaluates to 2*sum(omega^i) at each root omega,
+/// which involves modular inverses and can produce large values in [0, q-1].
+/// This is mathematically correct — the key property is that NTT roundtrips exactly.
 #[test]
-#[ignore]
-fn test_mldsa_ntt_preserves_small_values() {
+fn test_mldsa_ntt_constant_roundtrip() {
     let ntt_ctx = NTTContext::new(NTTType::MLDSA);
 
-    // Test that small inputs produce reasonable NTT outputs
-    let mut small_poly = Polynomial::new();
+    let mut poly = Polynomial::new();
     for i in 0..256 {
-        small_poly.coeffs[i] = 2; // All coefficients are 2
+        poly.coeffs[i] = 2;
     }
 
-    let mut ntt_poly = small_poly.clone();
-    ntt_ctx.forward(&mut ntt_poly).unwrap();
+    let original = poly.clone();
+    ntt_ctx.forward(&mut poly).unwrap();
 
-    // Find max coefficient in NTT domain
-    let mut max_coeff = 0;
-    for i in 0..256 {
-        let abs_coeff = ntt_poly.coeffs[i].abs();
-        if abs_coeff > max_coeff {
-            max_coeff = abs_coeff;
-        }
+    // NTT coefficients may be large (up to q-1) — this is expected
+    for coeff in &poly.coeffs {
+        assert!(
+            *coeff >= 0 && *coeff < ntt_ctx.modulus,
+            "NTT coefficient out of range: {}",
+            coeff
+        );
     }
 
-    println!("Max NTT coefficient for constant input 2: {}", max_coeff);
+    ntt_ctx.inverse(&mut poly).unwrap();
 
-    // For a constant polynomial, NTT should also be bounded
-    // This is a sanity check - the exact value depends on NTT definition
-    // but it shouldn't be in the millions
-    assert!(
-        max_coeff < 1_000_000,
-        "NTT of small constant should not produce huge coefficients: max={}",
-        max_coeff
-    );
+    for i in 0..256 {
+        assert_eq!(
+            poly.coeffs[i], original.coeffs[i],
+            "Roundtrip mismatch at index {}: got {}, expected {}",
+            i, poly.coeffs[i], original.coeffs[i]
+        );
+    }
 }

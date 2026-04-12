@@ -55,7 +55,7 @@ impl NTTContext {
                 // ML-DSA parameters from FIPS 204
                 let modulus = 8380417;
                 let qinv = 58728449; // q^(-1) mod 2^32 for ML-DSA
-                let r2 = 145; // 2^32^2 mod 8380417
+                let r2 = 2365951; // 2^64 mod 8380417
 
                 // Precomputed zetas for ML-DSA
                 let zetas = Self::precompute_zetas_mldsa();

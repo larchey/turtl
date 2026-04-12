@@ -123,20 +123,9 @@ pub(crate) fn ml_dsa_sign_internal(
     let mut s2_hat = Vec::with_capacity(k);
     let mut t0_hat = Vec::with_capacity(k);
 
-    eprintln!(
-        "DEBUG: s1[0] before NTT (first 10): {:?}",
-        &s1[0].coeffs[0..10]
-    );
-
     for i in 0..l {
         let mut s1_i = s1[i].clone();
         ntt_ctx.forward(&mut s1_i)?;
-        if i == 0 {
-            eprintln!(
-                "DEBUG: s1[0] after NTT (first 10): {:?}",
-                &s1_i.coeffs[0..10]
-            );
-        }
         s1_hat.push(s1_i);
     }
 
@@ -197,6 +186,7 @@ pub(crate) fn ml_dsa_sign_internal(
 
         // Compute c = H(mu || w1)
         let w1_encoded = encode_w1(&w1, gamma2)?;
+
         let mut c_data = Vec::new();
         c_data.extend_from_slice(&mu);
         c_data.extend_from_slice(&w1_encoded);
@@ -205,18 +195,9 @@ pub(crate) fn ml_dsa_sign_internal(
         // Sample c from challenge space
         let c = sample_in_ball(&c_tilde, tau)?;
 
-        if kappa == 0 {
-            eprintln!("  c before NTT (first 20): {:?}", &c.coeffs[0..20]);
-            eprintln!("  c hamming weight: {}", c.hamming_weight());
-        }
-
         // Convert c to NTT domain
         let mut c_hat = c.clone();
         ntt_ctx.forward(&mut c_hat)?;
-
-        if kappa == 0 {
-            eprintln!("  c after NTT (first 10): {:?}", &c_hat.coeffs[0..10]);
-        }
 
         // Compute z = y + c*s1 using centered arithmetic
         let mut z = Vec::with_capacity(l);
@@ -225,23 +206,8 @@ pub(crate) fn ml_dsa_sign_internal(
             let mut cs1_i = ntt_ctx.multiply_ntt(&c_hat, &s1_hat[i])?;
             ntt_ctx.inverse(&mut cs1_i)?;
 
-            if kappa == 0 && i == 0 {
-                eprintln!(
-                    "  cs1[0] before centering (first 10): {:?}",
-                    &cs1_i.coeffs[0..10]
-                );
-                eprintln!("  y[0] (first 10): {:?}", &y[0].coeffs[0..10]);
-            }
-
             // Convert to centered representation
             cs1_i.to_centered_representation(ntt_ctx.modulus);
-
-            if kappa == 0 && i == 0 {
-                eprintln!(
-                    "  cs1[0] after centering (first 10): {:?}",
-                    &cs1_i.coeffs[0..10]
-                );
-            }
 
             // Add y (already centered) + cs1 (now centered) using regular addition
             let mut z_i = Polynomial::new();
@@ -269,20 +235,6 @@ pub(crate) fn ml_dsa_sign_internal(
 
         if !z_ok {
             z_rejections += 1;
-            if kappa == 0 {
-                eprintln!(
-                    "First z rejection: max_norm = {}, threshold = {}",
-                    max_z_norm,
-                    gamma1 - beta
-                );
-                eprintln!("  Sample z[0] coeffs (first 10): {:?}", &z[0].coeffs[0..10]);
-                eprintln!("  gamma1 = {}, beta = {}", gamma1, beta);
-                eprintln!(
-                    "  modulus = {}, half_q = {}",
-                    ntt_ctx.modulus,
-                    ntt_ctx.modulus / 2
-                );
-            }
             kappa += 1;
             continue;
         }
@@ -496,6 +448,7 @@ pub(crate) fn ml_dsa_verify_internal(
     c_prime_data.extend_from_slice(&w1_encoded);
     let c_prime = hash::h_function(&c_prime_data, parameter_set.lambda() / 4);
 
+    // Compare c_tilde and c_prime
     // Compare c_tilde and c_prime
     Ok(c_tilde == c_prime)
 }
@@ -978,76 +931,34 @@ fn decompose(poly: &Polynomial, gamma2: usize) -> Result<(Polynomial, Polynomial
     Ok((high, low))
 }
 
-/// Decompose a single coefficient
+/// Decompose a single coefficient per FIPS 204 Algorithm 37.
 ///
-/// This function decomposes a coefficient r into r1 and r0 such that:
-///   r = r1 * 2 * alpha + r0, where r0 is in the range [-alpha, alpha)
+/// Decomposes r into (r1, r0) such that r ≡ r1 * (2*alpha) + r0 (mod q),
+/// where r0 is in the centered range (-alpha, alpha].
 ///
-/// This is used in ML-DSA for various operations like hint generation and verification.
+/// Includes the FIPS 204 special case: when r - r0 = q - 1, sets r1 = 0
+/// and r0 = r0 - 1 to keep r1 in the valid range [0, (q-1)/(2*alpha) - 1].
 fn decompose_coefficient(r: i32, alpha: usize) -> (i32, i32) {
-    use crate::security::fault_detection;
+    let q: i64 = 8380417;
+    let two_alpha = (alpha as i64) * 2;
 
-    // Validate alpha is within a reasonable range to prevent errors
-    // ML-DSA specifies alpha is either 88 (for ML-DSA-44) or 32 (for ML-DSA-65/87)
-    // This should be checked at a higher level, but we add a defensive check here
-    fault_detection::verify_bounds(alpha, 1, 1000000).expect("Alpha value is out of range");
+    // Ensure r is in [0, q-1]
+    let r_plus = ((r as i64 % q) + q) % q;
 
-    // Compute 2*alpha safely, checking for overflow
-    let two_alpha = match (alpha as i32).checked_mul(2) {
-        Some(val) => val,
-        None => panic!("Arithmetic overflow in decompose_coefficient"),
-    };
-
-    // Handle potential overflow or extreme values by using i64 for intermediate calculations
-    let r_i64 = r as i64;
-    let two_alpha_i64 = two_alpha as i64;
-
-    // Compute centered remainder modulo 2*alpha
-    let mut r0_i64 = r_i64 % two_alpha_i64;
-    if r0_i64 > alpha as i64 {
-        r0_i64 -= two_alpha_i64;
-    } else if r0_i64 < -(alpha as i64) {
-        r0_i64 += two_alpha_i64;
+    // Compute centered remainder: r0 = r mod± (2*alpha)
+    // Result in (-alpha, alpha] per FIPS 204 Section 2.4
+    let mut r0 = r_plus % two_alpha;
+    if r0 > alpha as i64 {
+        r0 -= two_alpha;
     }
 
-    // Convert back to i32 with bounds checking
-    let r0 = if r0_i64 > i32::MAX as i64 || r0_i64 < i32::MIN as i64 {
-        // Clamp to range
-        if r0_i64 > 0 {
-            alpha as i32 - 1
-        } else {
-            -(alpha as i32)
-        }
-    } else {
-        r0_i64 as i32
-    };
+    // FIPS 204 special case: when r - r0 = q - 1, wrap r1 to 0
+    if r_plus - r0 == q - 1 {
+        return (0, (r0 - 1) as i32);
+    }
 
-    // Ensure r0 is in the range [-alpha, alpha)
-    // If assertion would fail, clamp to valid range
-    let r0 = if r0 >= -(alpha as i32) && r0 < (alpha as i32) {
-        r0
-    } else if r0 >= (alpha as i32) {
-        alpha as i32 - 1
-    } else {
-        -(alpha as i32)
-    };
-
-    // Quotient - use i64 for intermediate calculation to avoid overflow
-    let r1_i64 = (r_i64 - r0 as i64) / two_alpha_i64;
-
-    // Convert r1 back to i32 with bounds checking
-    let r1 = if r1_i64 > i32::MAX as i64 || r1_i64 < i32::MIN as i64 {
-        // Clamp to a reasonable range
-        if r1_i64 > 0 {
-            i32::MAX
-        } else {
-            i32::MIN
-        }
-    } else {
-        r1_i64 as i32
-    };
-
-    (r1, r0)
+    let r1 = ((r_plus - r0) / two_alpha) as i32;
+    (r1, r0 as i32)
 }
 
 /// Make hint for high bits

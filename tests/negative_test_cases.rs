@@ -242,15 +242,8 @@ fn test_random_ciphertext_accepted() {
 // in the ML-DSA signing implementation. The signing algorithm is hitting the maximum retry
 // limit (1000 attempts) and failing with RandomnessError. This is caused by coefficient
 // clamping issues that need to be investigated and fixed.
-//
-// TODO: Fix ML-DSA signing implementation and re-enable these tests
-// - Investigate coefficient clamping warnings
-// - Fix norm check failures in signing loop
-// - Re-enable all signature verification negative tests
-
 /// Test signature verification with wrong public key
 #[test]
-#[ignore]
 fn test_verify_with_wrong_key() {
     // Generate two different keypairs using deterministic seeds
     let keypair1 = DsaKeyPair::from_seed(&TEST_SEED_1, DsaParameterSet::MlDsa44).unwrap();
@@ -272,7 +265,6 @@ fn test_verify_with_wrong_key() {
 
 /// Test signature verification with modified message
 #[test]
-#[ignore]
 fn test_verify_modified_message() {
     // Generate keypair using deterministic seed
     let keypair = DsaKeyPair::from_seed(&TEST_SEED_1, DsaParameterSet::MlDsa44).unwrap();
@@ -292,7 +284,6 @@ fn test_verify_modified_message() {
 
 /// Test signature verification with modified context
 #[test]
-#[ignore]
 fn test_verify_wrong_context() {
     // Generate keypair using deterministic seed
     let keypair = DsaKeyPair::from_seed(&TEST_SEED_1, DsaParameterSet::MlDsa44).unwrap();
@@ -313,7 +304,6 @@ fn test_verify_wrong_context() {
 
 /// Test signature verification with corrupted signature
 #[test]
-#[ignore]
 fn test_verify_corrupted_signature() {
     // Generate keypair using deterministic seed
     let keypair = DsaKeyPair::from_seed(&TEST_SEED_1, DsaParameterSet::MlDsa44).unwrap();
