@@ -1078,64 +1078,31 @@ fn encode_w1(w1: &[Polynomial], gamma2: usize) -> Result<Vec<u8>> {
     Ok(result)
 }
 
-/// Encode hint for ML-DSA
+/// Encode hint for ML-DSA (FIPS 204 Algorithm 20, HintBitPack).
+///
+/// Layout: omega position bytes (hint positions, per-polynomial in ascending
+/// order) followed by k bytes holding the *cumulative* count of ones through
+/// each polynomial.
 fn encode_hint(h: &[Polynomial], omega: usize) -> Result<Vec<u8>> {
     let k = h.len();
-    let mut result = Vec::with_capacity(omega + k);
+    let mut result = vec![0u8; omega + k];
 
-    // First, gather all positions where coefficients are 1
-    let mut positions = Vec::new();
+    let mut index = 0usize;
     for i in 0..k {
         for j in 0..256 {
             if h[i].coeffs[j] == 1 {
-                positions.push((i, j));
+                if index >= omega {
+                    return Err(Error::EncodingError(format!(
+                        "Too many ones in hint, maximum allowed: {}",
+                        omega
+                    )));
+                }
+                result[index] = j as u8;
+                index += 1;
             }
         }
-    }
-
-    // Check if number of 1s is within limit
-    if positions.len() > omega {
-        return Err(Error::EncodingError(format!(
-            "Too many ones in hint: {}, maximum allowed: {}",
-            positions.len(),
-            omega
-        )));
-    }
-
-    // Sort positions to ensure canonical ordering
-    positions.sort_by(|a, b| {
-        if a.0 != b.0 {
-            a.0.cmp(&b.0)
-        } else {
-            a.1.cmp(&b.1)
-        }
-    });
-
-    // Store positions in the result
-    let mut idx = 0;
-    for (_i, j) in &positions {
-        if idx >= omega {
-            break;
-        }
-        result.push(*j as u8);
-        idx += 1;
-    }
-
-    // Fill remaining positions with zeros
-    while idx < omega {
-        result.push(0);
-        idx += 1;
-    }
-
-    // Store number of ones per polynomial
-    for i in 0..k {
-        let mut count = 0;
-        for (poly_idx, _) in &positions {
-            if *poly_idx == i {
-                count += 1;
-            }
-        }
-        result.push(count);
+        // Cumulative count of ones through polynomial i
+        result[omega + i] = index as u8;
     }
 
     Ok(result)
@@ -1476,7 +1443,7 @@ fn decode_signature(
         let poly = decode_poly_signed(
             &signature_bytes[offset..offset + z_bytes_per_poly],
             gamma1 - 1,
-            gamma1 - 1,
+            gamma1,
         )?;
         z.push(poly);
         offset += z_bytes_per_poly;
@@ -1505,38 +1472,32 @@ fn decode_hint(bytes: &[u8], k: usize, omega: usize) -> Result<Vec<Polynomial>> 
         h.push(Polynomial::new());
     }
 
-    // Extract position bytes and count bytes
+    // Position bytes, then k cumulative-count bytes (FIPS 204 HintBitUnpack)
     let positions = &bytes[0..omega];
     let counts = &bytes[omega..omega + k];
 
-    // Validate that counts sum to at most omega
-    let total_count: usize = counts.iter().map(|&c| c as usize).sum();
-    if total_count > omega {
-        return Err(Error::InvalidSignature);
-    }
-
-    // Parse hints using counts to determine which positions go with which polynomial
-    let mut pos_idx = 0;
+    let mut index = 0usize;
     for i in 0..k {
-        let count = counts[i] as usize;
-        for _ in 0..count {
-            if pos_idx >= omega {
+        let end = counts[i] as usize;
+        // Cumulative counts must be non-decreasing and bounded by omega
+        if end < index || end > omega {
+            return Err(Error::InvalidSignature);
+        }
+
+        let first = index;
+        while index < end {
+            // Positions within a polynomial must be strictly increasing
+            if index > first && positions[index - 1] >= positions[index] {
                 return Err(Error::InvalidSignature);
             }
-
-            let pos = positions[pos_idx] as usize;
-            if pos >= 256 {
-                return Err(Error::InvalidSignature);
-            }
-
-            h[i].coeffs[pos] = 1;
-            pos_idx += 1;
+            h[i].coeffs[positions[index] as usize] = 1;
+            index += 1;
         }
     }
 
-    // Ensure remaining positions are 0
-    for i in pos_idx..omega {
-        if positions[i] != 0 {
+    // All remaining (unused) position bytes must be zero
+    for &p in &positions[index..omega] {
+        if p != 0 {
             return Err(Error::InvalidSignature);
         }
     }
@@ -1619,39 +1580,27 @@ fn decode_poly(bytes: &[u8], bits: usize, bound: u32) -> Result<Polynomial> {
     Ok(poly)
 }
 
-/// Encode a polynomial with coefficients in [-a, b]
+/// Encode a polynomial with coefficients in [-a, b] using FIPS 204 BitPack.
+///
+/// BitPack(w, a, b) stores (b - w_i) in bitlen(a+b) bits per coefficient.
 fn encode_poly_signed(poly: &Polynomial, a: usize, b: usize) -> Result<Vec<u8>> {
     let bits = bitlen((a + b) as u32);
     let mut bits_array = Vec::with_capacity(256 * bits);
 
-    // Track if we've shown warnings already to reduce output spam
-    let mut min_warning_shown = false;
-    let mut max_warning_shown = false;
-
     for i in 0..256 {
-        // Shift coefficient to the range [0, a+b]
-        let mut coeff = poly.coeffs[i] + (a as i32);
+        // FIPS 204 BitPack stores b - w_i, which lies in [0, a+b] for w in [-a, b].
+        let coeff = (b as i32) - poly.coeffs[i];
 
-        // Ensure coefficient is in valid range
-        if coeff < 0 {
-            coeff = 0;
-            // Log warning for coefficient adjustment (only once)
-            if !min_warning_shown {
-                eprintln!("Warning: Some coefficients were clamped to minimum value");
-                min_warning_shown = true;
-            }
-        } else if coeff > (a + b) as i32 {
-            coeff = (a + b) as i32;
-            // Log warning for coefficient adjustment (only once)
-            if !max_warning_shown {
-                eprintln!("Warning: Some coefficients were clamped to maximum value");
-                max_warning_shown = true;
-            }
+        if coeff < 0 || coeff > (a + b) as i32 {
+            return Err(Error::EncodingError(format!(
+                "Coefficient out of range for BitPack: {}",
+                poly.coeffs[i]
+            )));
         }
 
         let coeff_u32 = coeff as u32;
 
-        // Encode each bit of the coefficient
+        // Encode each bit of the coefficient (LSB first)
         for j in 0..bits {
             bits_array.push(((coeff_u32 >> j) & 1) as u8);
         }
@@ -1710,7 +1659,8 @@ fn decode_poly_signed(bytes: &[u8], a: usize, b: usize) -> Result<Polynomial> {
             )));
         }
 
-        poly.coeffs[i] = (coeff as i32) - (a as i32);
+        // FIPS 204 BitUnpack: w_i = b - (stored value)
+        poly.coeffs[i] = (b as i32) - (coeff as i32);
     }
 
     Ok(poly)
@@ -1759,7 +1709,7 @@ fn encode_signature(
 
     // Encode z
     for i in 0..l {
-        let encoded = encode_poly_signed(&z[i], gamma1 - 1, gamma1 - 1)?;
+        let encoded = encode_poly_signed(&z[i], gamma1 - 1, gamma1)?;
         signature.extend_from_slice(&encoded);
     }
 
