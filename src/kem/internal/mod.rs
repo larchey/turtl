@@ -49,21 +49,21 @@ pub(crate) fn ml_kem_keygen_internal(
     rhoprime.copy_from_slice(&expanded[32..96]);
     key_seed.copy_from_slice(&expanded[96..128]);
 
-    // 2-4. Generate matrix A, secret vector s, and error vector e
+    // 2-4. Generate matrix A-hat, secret vector s, and error vector e
     let (matrix_a, s, e) = k_pke::generate_key_components(&rho, &rhoprime, parameter_set)?;
 
-    // 5. Compute t = A·s + e
-    let t = k_pke::compute_public_t(&matrix_a, &s, &e)?;
+    // 5. Compute t-hat = A-hat·s-hat + e-hat (all in the NTT domain, FIPS 203)
+    let (t_hat, s_hat) = k_pke::compute_public_t(&matrix_a, &s, &e)?;
 
-    // 6-7. Encode the public key: ek_pke = ρ || ByteEncode_12(t)
-    let public_key_bytes = k_pke::encode_public_key(&rho, &t, parameter_set)?;
+    // 6-7. Encode the public key: ek_pke = ByteEncode_12(t-hat) || ρ
+    let public_key_bytes = k_pke::encode_public_key(&rho, &t_hat, parameter_set)?;
 
-    // 8. Compute H(ek_pke) - SHA3-256 hash (32 bytes)
-    let tr = hash::h_function(&public_key_bytes, 32);
+    // 8. Compute H(ek_pke) = SHA3-256(ek_pke) (32 bytes), per FIPS 203
+    let tr = hash::sha3_256(&public_key_bytes).to_vec();
 
     // 9-10. Encode the private key: dk_pke || ek_pke || H(ek_pke) || z
-    // where dk_pke = ByteEncode_12(s)
-    let dk_pke = k_pke::encode_private_key_pke(&s)?;
+    // where dk_pke = ByteEncode_12(s-hat) (NTT domain, FIPS 203)
+    let dk_pke = k_pke::encode_private_key_pke(&s_hat)?;
     let mut private_key_bytes = Vec::new();
     private_key_bytes.extend(&dk_pke);
     private_key_bytes.extend(&public_key_bytes);
@@ -81,8 +81,8 @@ pub(crate) fn ml_kem_encaps_internal(
 ) -> Result<(Vec<u8>, [u8; 32])> {
     // Implementation of ML-KEM.Encaps_internal from FIPS 203
 
-    // 1. Derive key K and randomness r from message and hash of public key
-    let public_key_hash = hash::h_function(public_key_bytes, 32);
+    // 1. Derive key K and randomness r from message and H(ek) = SHA3-256(ek)
+    let public_key_hash = hash::sha3_256(public_key_bytes).to_vec();
     let mut msg_data = Vec::with_capacity(message.len() + public_key_hash.len());
     msg_data.extend_from_slice(message);
     msg_data.extend_from_slice(&public_key_hash);
