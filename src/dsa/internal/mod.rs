@@ -773,53 +773,38 @@ fn power2round(t: &[Polynomial], d: usize) -> Result<(Vec<Polynomial>, Vec<Polyn
     Ok((t1, t0))
 }
 
-/// Sample a polynomial with exactly tau +/-1 coefficients
+/// Sample a polynomial with exactly tau +/-1 coefficients (FIPS 204 Algorithm 29).
+///
+/// The first 8 squeezed bytes provide 64 sign bits; positions are then chosen by
+/// rejection sampling one byte at a time (j <= i), giving a byte-exact, unbiased
+/// mapping from c_tilde to the challenge polynomial.
 fn sample_in_ball(seed: &[u8], tau: usize) -> Result<Polynomial> {
     use crate::security::fault_detection;
     let mut poly = Polynomial::new();
 
-    // Verify tau is reasonable
-    fault_detection::verify_bounds(tau, 1, 128).map_err(|_| Error::RandomnessError)?;
+    // FIPS 204 uses tau <= 64 (fits within the 64 sign bits).
+    fault_detection::verify_bounds(tau, 1, 64).map_err(|_| Error::RandomnessError)?;
 
-    // Create a new context for each call to avoid state issues
     let mut ctx = hash::SHAKE256Context::init();
     ctx.absorb(seed);
 
-    // Generate sign bits
-    let sign_bytes = ctx.squeeze(32);
-    let sign_bits = bytes_to_bits(&sign_bytes);
+    // First 8 bytes = 64 sign bits, consumed LSB-first as they are used.
+    let sign_bytes = ctx.squeeze(8);
+    let signs = u64::from_le_bytes(sign_bytes.as_slice().try_into().unwrap());
 
-    // Use Fisher-Yates algorithm to select positions with timeout protection
-    let mut indices = Vec::with_capacity(256);
-    for i in 0..256 {
-        indices.push(i);
-    }
-
-    // For each position from the end, swap with a random earlier position
-    let mut rng_bytes = ctx.squeeze((256 - tau) * 2); // Get all random bytes at once
-    let mut byte_pos = 0;
-
+    let mut sign_idx = 0u32;
     for i in (256 - tau)..256 {
-        // Get random index j in [0..i]
-        if byte_pos + 2 > rng_bytes.len() {
-            // Get more bytes if needed
-            rng_bytes = ctx.squeeze(256);
-            byte_pos = 0;
-        }
+        // Rejection-sample j in [0, i] one byte at a time.
+        let j = loop {
+            let b = ctx.squeeze(1)[0] as usize;
+            if b <= i {
+                break b;
+            }
+        };
 
-        let j = ((rng_bytes[byte_pos] as u16) | ((rng_bytes[byte_pos + 1] as u16) << 8))
-            % (i as u16 + 1);
-        byte_pos += 2;
-
-        // Swap positions i and j
-        indices.swap(i, j as usize);
-    }
-
-    // Set the selected positions to +/-1
-    for i in 0..tau {
-        let idx = indices[256 - tau + i];
-        let sign_bit = sign_bits[i % sign_bits.len()];
-        poly.coeffs[idx] = if sign_bit == 0 { 1 } else { -1 };
+        poly.coeffs[i] = poly.coeffs[j];
+        poly.coeffs[j] = if (signs >> sign_idx) & 1 == 1 { -1 } else { 1 };
+        sign_idx += 1;
     }
 
     Ok(poly)
