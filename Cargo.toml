@@ -27,7 +27,7 @@ fips204 = "0.4"
 [features]
 default = ["std"]
 std = ["rand/std", "rand_chacha/std", "sha3/std"]
-nightly = ["std"]  # For SIMD optimizations
+nightly = ["std"]
 
 [[bench]]
 name = "ntt_benchmark"

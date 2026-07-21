@@ -91,7 +91,8 @@ fn ref_sign_turtl_verify() -> bool {
     let msg = b"interop test message";
     let sig = sk.try_sign(msg, b"").unwrap();
 
-    let turtl_pk = match dsa::PublicKey::new(pk.into_bytes().to_vec(), DsaParams::MlDsa44) {
+    let pk_bytes = pk.into_bytes();
+    let turtl_pk = match dsa::PublicKey::new(pk_bytes.to_vec(), DsaParams::MlDsa44) {
         Ok(p) => p,
         Err(_) => return false,
     };
@@ -99,7 +100,18 @@ fn ref_sign_turtl_verify() -> bool {
         Ok(s) => s,
         Err(_) => return false,
     };
-    dsa::verify(&turtl_pk, msg, &turtl_sig, b"").unwrap_or(false)
+    match dsa::verify(&turtl_pk, msg, &turtl_sig, b"") {
+        Ok(v) => {
+            if !v {
+                println!("    turtl verify returned false (challenge mismatch)");
+            }
+            v
+        }
+        Err(e) => {
+            println!("    turtl verify errored: {e:?}");
+            false
+        }
+    }
 }
 
 fn main() {

@@ -449,7 +449,6 @@ pub(crate) fn ml_dsa_verify_internal(
     let c_prime = hash::h_function(&c_prime_data, parameter_set.lambda() / 4);
 
     // Compare c_tilde and c_prime
-    // Compare c_tilde and c_prime
     Ok(c_tilde == c_prime)
 }
 
@@ -602,7 +601,10 @@ fn expand_a(rho: &[u8], k: usize, l: usize) -> Result<Vec<Vec<Polynomial>>> {
     Ok(matrix_a)
 }
 
-/// Rejection sampling in NTT domain
+/// Rejection sampling of a uniform NTT-domain polynomial (FIPS 204 RejNTTPoly).
+///
+/// ML-DSA coefficients are ~23 bits (q = 8380417), so each candidate is built
+/// from 3 bytes via CoeffFromThreeBytes (mask the top bit, reject if >= q).
 fn reject_sample_ntt(seed: &[u8], ntt_ctx: &NTTContext) -> Result<Polynomial> {
     let mut poly = Polynomial::new();
     let mut j = 0;
@@ -613,18 +615,14 @@ fn reject_sample_ntt(seed: &[u8], ntt_ctx: &NTTContext) -> Result<Polynomial> {
     while j < 256 {
         let bytes = ctx.squeeze(3);
 
-        // Extract two values from 3 bytes
-        let d1 = ((bytes[0] as u32) | ((bytes[1] as u32 & 0x0F) << 8)) as i32;
-        let d2 = (((bytes[1] as u32 & 0xF0) >> 4) | ((bytes[2] as u32) << 4)) as i32;
+        // CoeffFromThreeBytes: 23-bit little-endian value (top bit of b2 cleared)
+        let coeff = (bytes[0] as u32)
+            | ((bytes[1] as u32) << 8)
+            | (((bytes[2] as u32) & 0x7F) << 16);
 
         // Reject values that are not in [0, q-1]
-        if d1 < ntt_ctx.modulus {
-            poly.coeffs[j] = d1;
-            j += 1;
-        }
-
-        if j < 256 && d2 < ntt_ctx.modulus {
-            poly.coeffs[j] = d2;
+        if (coeff as i32) < ntt_ctx.modulus {
+            poly.coeffs[j] = coeff as i32;
             j += 1;
         }
     }
@@ -1718,6 +1716,47 @@ fn encode_signature(
     signature.extend_from_slice(&encoded_hint);
 
     Ok(signature)
+}
+
+#[cfg(test)]
+mod sib_tests {
+    use super::*;
+    use sha3::digest::{ExtendableOutput, Update, XofReader};
+
+    // Inline FIPS 204 Algorithm 29 reference for cross-checking.
+    fn ref_sample_in_ball(seed: &[u8], tau: usize) -> [i32; 256] {
+        let mut c = [0i32; 256];
+        let mut x = sha3::Shake256::default();
+        x.update(seed);
+        let mut r = x.finalize_xof();
+        let mut s8 = [0u8; 8];
+        r.read(&mut s8);
+        let signs = u64::from_le_bytes(s8);
+        let mut si = 0u32;
+        for i in (256 - tau)..256 {
+            let j = loop {
+                let mut b = [0u8; 1];
+                r.read(&mut b);
+                if (b[0] as usize) <= i {
+                    break b[0] as usize;
+                }
+            };
+            c[i] = c[j];
+            c[j] = if (signs >> si) & 1 == 1 { -1 } else { 1 };
+            si += 1;
+        }
+        c
+    }
+
+    #[test]
+    fn sample_in_ball_matches_fips() {
+        for (seed_byte, tau) in [(1u8, 39usize), (2, 49), (3, 60), (200, 39)] {
+            let seed = [seed_byte; 32];
+            let got = sample_in_ball(&seed, tau).unwrap();
+            let expected = ref_sample_in_ball(&seed, tau);
+            assert_eq!(got.coeffs, expected, "mismatch for tau={tau}");
+        }
+    }
 }
 
 /// Calculate bit length of an integer

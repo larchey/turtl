@@ -54,4 +54,42 @@ fn main() {
     }
     println!("ML-KEM NTT multiply vs schoolbook: {} / 256 mismatches", mismatches);
     println!("RESULT: {}", if mismatches == 0 { "CORRECT" } else { "WRONG — multiply_ntt is not negacyclic convolution" });
+
+    // ML-DSA (q = 8380417)
+    const QD: i64 = 8380417;
+    let dctx = NTTContext::new(NTTType::MLDSA);
+    let mut da = Polynomial::new();
+    let mut db = Polynomial::new();
+    for i in 0..256 {
+        da.coeffs[i] = ((i * 7 + 3) % 23) as i32;
+        db.coeffs[i] = ((i * 11 + 1) % 19) as i32;
+    }
+    // schoolbook negacyclic mod (x^256+1, QD)
+    let mut acc = [0i64; 512];
+    for i in 0..256 {
+        for j in 0..256 {
+            acc[i + j] += da.coeffs[i] as i64 * db.coeffs[j] as i64;
+        }
+    }
+    let mut dexp = Polynomial::new();
+    for k in 0..256 {
+        dexp.coeffs[k] = (acc[k] - acc[k + 256]).rem_euclid(QD) as i32;
+    }
+    let mut dah = da.clone();
+    let mut dbh = db.clone();
+    dctx.forward(&mut dah).unwrap();
+    dctx.forward(&mut dbh).unwrap();
+    let mut dprod = dctx.multiply_ntt(&dah, &dbh).unwrap();
+    dctx.inverse(&mut dprod).unwrap();
+    let mut dm = 0;
+    for i in 0..256 {
+        if dprod.coeffs[i].rem_euclid(QD as i32) != dexp.coeffs[i] {
+            dm += 1;
+            if dm <= 5 {
+                println!("  D coeff[{i}]: ntt={} schoolbook={}", dprod.coeffs[i], dexp.coeffs[i]);
+            }
+        }
+    }
+    println!("ML-DSA NTT multiply vs schoolbook: {} / 256 mismatches", dm);
+    println!("RESULT: {}", if dm == 0 { "CORRECT" } else { "WRONG" });
 }
