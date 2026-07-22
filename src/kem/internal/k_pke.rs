@@ -16,7 +16,7 @@ use super::aux;
 /// Returns (A, s, e) where all are in normal (non-NTT) domain.
 pub(crate) fn generate_key_components(
     rho: &[u8; 32],
-    sigma: &[u8; 64],
+    sigma: &[u8; 32],
     parameter_set: ParameterSet,
 ) -> Result<(Vec<Vec<Polynomial>>, Vec<Polynomial>, Vec<Polynomial>)> {
     let k = parameter_set.k();

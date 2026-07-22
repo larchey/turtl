@@ -23,8 +23,7 @@ fn main() {
     let (rek, _rdk) = fips203::ml_kem_512::KG::keygen_from_seed(d, z);
     let ref_ek = rek.into_bytes().to_vec();
 
-    // turtl takes a single 32-byte seed; try d as that seed.
-    let kkp = turtl::kem::KeyPair::from_seed(&d, turtl::kem::ParameterSet::MlKem512).unwrap();
+    let kkp = turtl::kem::KeyPair::from_seeds(&d, &z, turtl::kem::ParameterSet::MlKem512).unwrap();
     let turtl_ek = kkp.public_key().as_bytes().to_vec();
 
     println!(

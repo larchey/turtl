@@ -10,47 +10,37 @@ use crate::kem::{Ciphertext, ParameterSet, PrivateKey, PublicKey, SharedSecret};
 pub mod aux;
 pub mod k_pke;
 
-/// Generate a keypair from a seed.
+/// Generate a keypair from the two 32-byte seeds d and z (FIPS 203 KeyGen_internal).
 pub(crate) fn seed_to_keypair(
-    seed: &[u8; 32],
+    d: &[u8; 32],
+    z: &[u8; 32],
     parameter_set: ParameterSet,
 ) -> Result<super::KeyPair> {
-    // Call the internal key generation function
-    let (public_key_bytes, private_key_bytes) = ml_kem_keygen_internal(seed, parameter_set)?;
+    let (public_key_bytes, private_key_bytes) = ml_kem_keygen_internal(d, z, parameter_set)?;
 
-    // Create public and private key objects
     let public_key = PublicKey::new(public_key_bytes, parameter_set)?;
     let private_key = PrivateKey::new(private_key_bytes, parameter_set)?;
 
-    // Return the key pair
     super::KeyPair::from_keys(public_key, private_key)
 }
 
-/// Internal function for ML-KEM key generation
+/// ML-KEM.KeyGen_internal (FIPS 203): expand d into (rho, sigma) with G, and
+/// append the independent implicit-rejection value z to the private key.
 pub(crate) fn ml_kem_keygen_internal(
-    seed: &[u8; 32],
+    d: &[u8; 32],
+    z: &[u8; 32],
     parameter_set: ParameterSet,
 ) -> Result<(Vec<u8>, Vec<u8>)> {
-    // Implementation of ML-KEM.KeyGen_internal from FIPS 203
-
-    // 1. Expand the seed to get rho, rho', and K
     let k = parameter_set.k();
-    let mut data = Vec::with_capacity(seed.len() + 2);
-    data.extend_from_slice(seed);
-    data.push(k as u8);
-    data.push(0);
-    let expanded = hash::h_function(&data, 128);
 
-    let mut rho = [0u8; 32];
-    let mut rhoprime = [0u8; 64];
-    let mut key_seed = [0u8; 32];
-
-    rho.copy_from_slice(&expanded[0..32]);
-    rhoprime.copy_from_slice(&expanded[32..96]);
-    key_seed.copy_from_slice(&expanded[96..128]);
+    // 1. (rho, sigma) = G(d || k), where G = SHA3-512.
+    let mut g_input = Vec::with_capacity(33);
+    g_input.extend_from_slice(d);
+    g_input.push(k as u8);
+    let (rho, sigma) = hash::g_function(&g_input);
 
     // 2-4. Generate matrix A-hat, secret vector s, and error vector e
-    let (matrix_a, s, e) = k_pke::generate_key_components(&rho, &rhoprime, parameter_set)?;
+    let (matrix_a, s, e) = k_pke::generate_key_components(&rho, &sigma, parameter_set)?;
 
     // 5. Compute t-hat = A-hat·s-hat + e-hat (all in the NTT domain, FIPS 203)
     let (t_hat, s_hat) = k_pke::compute_public_t(&matrix_a, &s, &e)?;
@@ -68,7 +58,7 @@ pub(crate) fn ml_kem_keygen_internal(
     private_key_bytes.extend(&dk_pke);
     private_key_bytes.extend(&public_key_bytes);
     private_key_bytes.extend(&tr);
-    private_key_bytes.extend(&key_seed);
+    private_key_bytes.extend(z);
 
     Ok((public_key_bytes, private_key_bytes))
 }

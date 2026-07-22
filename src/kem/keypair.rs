@@ -35,7 +35,17 @@ impl KeyPair {
         })
     }
 
-    /// Create a key pair from a seed
+    /// Create a key pair from the two 32-byte seeds `d` and `z`, matching
+    /// FIPS 203 ML-KEM.KeyGen_internal(d, z). This is the deterministic,
+    /// KAT-reproducible entry point.
+    pub fn from_seeds(d: &[u8; 32], z: &[u8; 32], parameter_set: ParameterSet) -> Result<Self> {
+        seed_to_keypair(d, z, parameter_set)
+    }
+
+    /// Create a key pair from a single 32-byte seed, used as both `d` and `z`.
+    ///
+    /// For NIST-vector reproduction use [`KeyPair::from_seeds`] with independent
+    /// `d` and `z`.
     pub fn from_seed(seed: &[u8], parameter_set: ParameterSet) -> Result<Self> {
         if seed.len() != 32 {
             return Err(Error::InvalidParameterSet);
@@ -44,7 +54,7 @@ impl KeyPair {
         let mut seed_array = [0u8; 32];
         seed_array.copy_from_slice(seed);
 
-        seed_to_keypair(&seed_array, parameter_set)
+        seed_to_keypair(&seed_array, &seed_array, parameter_set)
     }
 
     /// Get the public key
@@ -65,12 +75,7 @@ impl KeyPair {
 
 /// Generate a new ML-KEM key pair
 pub fn generate(parameter_set: ParameterSet) -> Result<KeyPair> {
-    // Generate a random 32-byte seed
-    let mut seed = [0u8; 32];
-    OsRng.fill_bytes(&mut seed);
-
-    // Generate key pair from seed
-    seed_to_keypair(&seed, parameter_set)
+    generate_with_rng(parameter_set, &mut OsRng)
 }
 
 /// Generate a key pair with a provided RNG
@@ -78,10 +83,11 @@ pub fn generate_with_rng<R>(parameter_set: ParameterSet, rng: &mut R) -> Result<
 where
     R: RngCore + CryptoRng,
 {
-    // Generate a random 32-byte seed
-    let mut seed = [0u8; 32];
-    rng.fill_bytes(&mut seed);
+    // FIPS 203 KeyGen draws two independent 32-byte seeds d and z.
+    let mut d = [0u8; 32];
+    let mut z = [0u8; 32];
+    rng.fill_bytes(&mut d);
+    rng.fill_bytes(&mut z);
 
-    // Generate key pair from seed
-    seed_to_keypair(&seed, parameter_set)
+    seed_to_keypair(&d, &z, parameter_set)
 }
