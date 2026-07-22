@@ -26,16 +26,17 @@
 //! - **ML-KEM-768**: Security category 3 (equivalent to AES-192)
 //! - **ML-KEM-1024**: Security category 5 (equivalent to AES-256)
 //!
-//! # Security Features
+//! # Security notes
 //!
-//! This implementation includes several security features:
+//! - **Zeroization**: private keys and shared secrets zeroize their byte buffers on drop.
+//!   Note that some intermediate secrets are not yet zeroized.
+//! - **Implicit rejection**: decapsulation selects the shared secret in constant time using
+//!   the `security::constant_time` primitives.
+//! - **Input validation**: key, ciphertext, and parameter-set lengths are checked.
 //!
-//! - **Constant-Time Operations**: All cryptographic operations are implemented to run in constant time
-//!   to prevent timing side-channel attacks.
-//! - **Automatic Zeroization**: Sensitive data (private keys, shared secrets) is automatically
-//!   zeroized when dropped.
-//! - **Fault Detection**: Mechanisms to detect fault injection attacks during decapsulation.
-//! - **Input Validation**: Thorough validation of inputs to prevent attacks.
+//! This implementation is **not** hardened against timing/power side-channels beyond the
+//! selection primitives above, and has not had an independent audit — see
+//! `SECURITY_REVIEW_2026-07.md`. It is not yet suitable for protecting production data.
 //!
 //! # Usage Example
 //!

@@ -33,16 +33,15 @@
 //! provide domain separation or additional authenticated data. The context is bound
 //! to the signature and must match during verification.
 //!
-//! # Security Features
+//! # Security notes
 //!
-//! This implementation includes several security features:
+//! - **Zeroization**: private keys zeroize their byte buffers on drop. Some intermediate
+//!   secrets are not yet zeroized.
+//! - **Input validation**: key, signature, context, and parameter-set lengths are checked.
 //!
-//! - **Constant-Time Operations**: All cryptographic operations run in constant time
-//!   to prevent timing side-channel attacks.
-//! - **Automatic Zeroization**: Sensitive data (private keys, intermediate values) is
-//!   automatically zeroized when dropped.
-//! - **Fault Detection**: Mechanisms to detect fault injection attacks.
-//! - **Input Validation**: Thorough validation of inputs to prevent attacks.
+//! This implementation is **not** hardened against timing/power side-channels and has not had
+//! an independent audit — see `SECURITY_REVIEW_2026-07.md`. It is not yet suitable for
+//! protecting production data.
 //!
 //! # Usage Example
 //!

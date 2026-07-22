@@ -8,7 +8,7 @@ repository = "https://github.com/larchey/turtl"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 keywords = ["cryptography", "post-quantum", "lattice", "kem", "signature"]
-categories = ["cryptography", "no-std"]
+categories = ["cryptography"]
 
 [dependencies]
 rand = { version = "0.8", default-features = false }
