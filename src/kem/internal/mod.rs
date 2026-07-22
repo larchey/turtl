@@ -89,9 +89,8 @@ pub(crate) fn ml_kem_decaps_internal(
     private_key_bytes: &[u8],
     ciphertext: &[u8],
     parameter_set: ParameterSet,
-) -> Result<([u8; 32], Vec<u8>)> {
+) -> Result<[u8; 32]> {
     // Implementation of ML-KEM.Decaps_internal from FIPS 203
-    // Enhanced with fault attack countermeasures
 
     // 1-4. Extract components from the private key
     let (dk_pke, ek_pke, h, z) = k_pke::decode_private_key(private_key_bytes, parameter_set)?;
@@ -111,30 +110,19 @@ pub(crate) fn ml_kem_decaps_internal(
     // 9. Re-encrypt using derived randomness
     let c_prime = k_pke::encrypt(&ek_pke, &m_prime, &r_prime, parameter_set)?;
 
-    // 10-11. Check if ciphertexts match and select the appropriate key
-    let mut k = [0u8; 32];
-
-    // Use our security module for constant-time operations
+    // 10-11. Select K' if the ciphertext re-encrypts correctly, else the
+    // implicit-rejection value K_bar — in constant time.
     use crate::security::constant_time;
     use crate::security::fault_detection;
 
-    // First check lengths - this reveals length but that's not security sensitive
-    let lengths_match = ciphertext.len() == c_prime.len();
+    let is_equal = ciphertext.len() == c_prime.len() && fault_detection::ct_eq(ciphertext, &c_prime);
 
-    // Only do the comparison if lengths match (preserves constant-time for valid inputs)
-    let is_equal = if lengths_match {
-        fault_detection::ct_eq(ciphertext, &c_prime)
-    } else {
-        false
-    };
-
-    // For each byte of the shared secret, select between k_prime and k_bar in constant time
+    let mut k = [0u8; 32];
     for i in 0..32 {
         k[i] = constant_time::ct_select_byte(k_prime[i], k_bar[i], is_equal);
     }
 
-    // Return both the shared secret and the re-encrypted ciphertext for fault detection
-    Ok((k, c_prime))
+    Ok(k)
 }
 
 pub(crate) fn encapsulate_internal(public_key: &PublicKey) -> Result<(Ciphertext, SharedSecret)> {
@@ -163,10 +151,7 @@ pub(crate) fn decapsulate_internal(
         return Err(Error::InvalidParameterSet);
     }
 
-    // The implicit-rejection comparison (ciphertext vs. re-encryption) is done
-    // inside ml_kem_decaps_internal, which selects between K' and K_bar in
-    // constant time. No further comparison is meaningful here.
-    let (shared_secret_bytes, _re_encrypted) = ml_kem_decaps_internal(
+    let shared_secret_bytes = ml_kem_decaps_internal(
         private_key.as_bytes(),
         ciphertext.as_bytes(),
         private_key.parameter_set(),
