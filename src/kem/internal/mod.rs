@@ -173,35 +173,14 @@ pub(crate) fn decapsulate_internal(
         return Err(Error::InvalidParameterSet);
     }
 
-    // Call the internal decapsulation function with re-encryption for verification
-    let (shared_secret_bytes, re_encrypted_ciphertext) = ml_kem_decaps_internal(
+    // The implicit-rejection comparison (ciphertext vs. re-encryption) is done
+    // inside ml_kem_decaps_internal, which selects between K' and K_bar in
+    // constant time. No further comparison is meaningful here.
+    let (shared_secret_bytes, _re_encrypted) = ml_kem_decaps_internal(
         private_key.as_bytes(),
         ciphertext.as_bytes(),
         private_key.parameter_set(),
     )?;
 
-    // Create shared secret object
-    let shared_secret = SharedSecret::new(shared_secret_bytes);
-
-    // Create a new ciphertext from the re-encrypted bytes for verification
-    let re_encrypted = Ciphertext::new(re_encrypted_ciphertext, private_key.parameter_set())?;
-
-    // Use the security module for constant-time operations and fault detection
-    use crate::security::fault_detection;
-
-    // Verify the re-encryption result in constant time
-    // In ML-KEM, not all cases pass this check by design (implicit rejection)
-    // This check is done but the result isn't used directly (handled by k_bar selection)
-    let _verification_result =
-        fault_detection::ct_eq(ciphertext.as_bytes(), re_encrypted.as_bytes());
-
-    // Note: We're not explicitly handling verification failure here because the ml_kem_decaps_internal
-    // function already handles the implicit rejection case by using k_bar when ciphertexts don't match.
-    // This verification step is an additional security measure for fault detection.
-
-    // Verify integrity of the shared secret (detect fault attacks during processing)
-    let shared_secret_copy = shared_secret.clone();
-    fault_detection::verify_shared_secret_integrity(&shared_secret, &shared_secret_copy)?;
-
-    Ok(shared_secret)
+    Ok(SharedSecret::new(shared_secret_bytes))
 }

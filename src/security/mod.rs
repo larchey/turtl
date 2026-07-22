@@ -13,4 +13,4 @@ pub mod fault_detection;
 
 // Re-export commonly used items for convenience
 pub use constant_time::{ct_cmov, ct_cswap, ct_select};
-pub use fault_detection::{ct_eq, verify_bounds, verify_re_encryption};
+pub use fault_detection::{ct_eq, verify_bounds};
