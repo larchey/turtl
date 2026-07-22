@@ -611,28 +611,33 @@ fn expand_s(
 ) -> Result<(Vec<Polynomial>, Vec<Polynomial>)> {
     let mut s1 = Vec::with_capacity(l);
     let mut s2 = Vec::with_capacity(k);
-    let mut counter = 0u8;
 
-    // Sample s1
-    for _i in 0..l {
-        let seed = [sigma, &[counter]].concat();
-        counter += 1;
-        let s1_i = sample_bounded_poly(&seed, eta)?;
-        s1.push(s1_i);
+    // FIPS 204 ExpandS: nonce is a 2-byte little-endian integer; s1 uses
+    // nonces 0..l and s2 uses nonces l..l+k.
+    for i in 0..l {
+        let seed = [sigma, &(i as u16).to_le_bytes()].concat();
+        s1.push(sample_bounded_poly(&seed, eta)?);
     }
-
-    // Sample s2
-    for _i in 0..k {
-        let seed = [sigma, &[counter]].concat();
-        counter += 1;
-        let s2_i = sample_bounded_poly(&seed, eta)?;
-        s2.push(s2_i);
+    for i in 0..k {
+        let seed = [sigma, &((l + i) as u16).to_le_bytes()].concat();
+        s2.push(sample_bounded_poly(&seed, eta)?);
     }
 
     Ok((s1, s2))
 }
 
-/// Sample a polynomial with coefficients in [-eta, eta]
+/// Map a half-byte to a coefficient in [-eta, eta] (FIPS 204 CoeffFromHalfByte).
+///
+/// Returns None when the value must be rejected.
+fn coeff_from_half_byte(b: u8, eta: usize) -> Option<i32> {
+    match eta {
+        2 if b < 15 => Some(2 - (b as i32 % 5)),
+        4 if b < 9 => Some(4 - b as i32),
+        _ => None,
+    }
+}
+
+/// Sample a polynomial with coefficients in [-eta, eta] (FIPS 204 RejBoundedPoly).
 fn sample_bounded_poly(seed: &[u8], eta: usize) -> Result<Polynomial> {
     let mut poly = Polynomial::new();
 
@@ -641,34 +646,25 @@ fn sample_bounded_poly(seed: &[u8], eta: usize) -> Result<Polynomial> {
 
     let mut j = 0;
     let mut iterations = 0;
-    let max_iterations = 1024; // Safety limit - increased for correct rejection sampling
-
-    // FIPS 204: Sample coefficients in [-eta, eta] using rejection sampling
-    // Accept nibble values in [0, 2*eta], which map to [-eta, eta] after subtracting eta
-    let threshold = 2 * eta + 1;
-
-    while j < 256 && iterations < max_iterations {
+    while j < 256 {
+        if iterations >= 10_000 {
+            return Err(Error::RandomnessError);
+        }
         iterations += 1;
+
         let byte = ctx.squeeze(1)[0];
 
-        // Extract two values from each byte
-        let b1 = byte & 0x0F;
-        let b2 = byte >> 4;
-
-        // Rejection sampling: accept if value in valid range
-        if usize::from(b1) < threshold {
-            poly.coeffs[j] = (b1 as i32) - (eta as i32);
+        // Low nibble first, then high nibble.
+        if let Some(c) = coeff_from_half_byte(byte & 0x0F, eta) {
+            poly.coeffs[j] = c;
             j += 1;
         }
-
-        if j < 256 && usize::from(b2) < threshold {
-            poly.coeffs[j] = (b2 as i32) - (eta as i32);
-            j += 1;
+        if j < 256 {
+            if let Some(c) = coeff_from_half_byte(byte >> 4, eta) {
+                poly.coeffs[j] = c;
+                j += 1;
+            }
         }
-    }
-
-    if j < 256 {
-        return Err(Error::RandomnessError);
     }
 
     Ok(poly)
@@ -723,16 +719,22 @@ fn power2round(t: &[Polynomial], d: usize) -> Result<(Vec<Polynomial>, Vec<Polyn
     let mut t1 = Vec::with_capacity(k);
     let mut t0 = Vec::with_capacity(k);
 
+    let q: i32 = 8380417;
+    let two_d = 1i32 << d;
     for i in 0..k {
         let mut t1_i = Polynomial::new();
         let mut t0_i = Polynomial::new();
 
         for j in 0..256 {
-            // Compute t1 = ⌊t/2^d⌋
-            t1_i.coeffs[j] = t[i].coeffs[j] >> d;
-
-            // Compute t0 = t - t1*2^d
-            t0_i.coeffs[j] = t[i].coeffs[j] - (t1_i.coeffs[j] << d);
+            // FIPS 204 Power2Round: r0 is the centered remainder mod 2^d, so
+            // t1 = round(r / 2^d) rather than floor.
+            let r = t[i].coeffs[j].rem_euclid(q);
+            let mut r0 = r & (two_d - 1);
+            if r0 > two_d / 2 {
+                r0 -= two_d;
+            }
+            t1_i.coeffs[j] = (r - r0) >> d;
+            t0_i.coeffs[j] = r0;
         }
 
         t1.push(t1_i);
@@ -1148,8 +1150,9 @@ fn encode_private_key(
     let eta = parameter_set.eta();
     let d = parameter_set.d();
 
-    let t0_max_value = (1 << d) - 1;
-    let t0_bits_per_coeff = bitlen(t0_max_value);
+    // FIPS 204 packs t0 as a signed value in [-(2^(d-1)-1), 2^(d-1)].
+    let t0_a = (1usize << (d - 1)) - 1;
+    let t0_b = 1usize << (d - 1);
 
     let mut private_key = Vec::with_capacity(parameter_set.private_key_size());
 
@@ -1172,7 +1175,7 @@ fn encode_private_key(
 
     // Encode t0
     for i in 0..k {
-        let encoded = encode_poly(&t0[i], t0_bits_per_coeff, t0_max_value)?;
+        let encoded = encode_poly_signed(&t0[i], t0_a, t0_b)?;
         private_key.extend_from_slice(&encoded);
     }
 
@@ -1254,9 +1257,10 @@ fn decode_private_key(
     let _s_bits_per_coeff = bitlen(2 * s_max_value);
     let s_bytes_per_poly = (256 * _s_bits_per_coeff).div_ceil(8);
 
-    let t0_max_value = (1 << d) - 1;
-    let t0_bits_per_coeff = bitlen(t0_max_value);
-    let t0_bytes_per_poly = (256 * t0_bits_per_coeff).div_ceil(8);
+    // t0 is packed as a signed value in [-(2^(d-1)-1), 2^(d-1)] using d bits.
+    let t0_a = (1usize << (d - 1)) - 1;
+    let t0_b = 1usize << (d - 1);
+    let t0_bytes_per_poly = (256 * d).div_ceil(8);
 
     // Check if private key has enough bytes
     let required_size = 128 + // rho + key + tr
@@ -1309,10 +1313,10 @@ fn decode_private_key(
             return Err(Error::InvalidPrivateKey);
         }
 
-        let poly = decode_poly(
+        let poly = decode_poly_signed(
             &private_key_bytes[offset..offset + t0_bytes_per_poly],
-            t0_bits_per_coeff,
-            t0_max_value,
+            t0_a,
+            t0_b,
         )?;
         t0.push(poly);
         offset += t0_bytes_per_poly;
