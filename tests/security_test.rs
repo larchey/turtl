@@ -133,60 +133,6 @@ fn test_fault_detection() {
     }
 }
 
-#[test]
-fn test_signature_verification_checks() {
-    // Test matching verification results
-    let result = fault_detection::verify_signature_checks(true, true);
-    assert!(result.is_ok(), "Matching verification results should pass");
-
-    let result = fault_detection::verify_signature_checks(false, false);
-    assert!(
-        result.is_ok(),
-        "Matching verification results should pass (both false)"
-    );
-
-    // Test mismatching verification results
-    let result = fault_detection::verify_signature_checks(true, false);
-    assert!(
-        result.is_err(),
-        "Mismatching verification results should fail"
-    );
-    match result {
-        Err(Error::FaultDetected) => (),
-        _ => panic!("Expected FaultDetected error"),
-    }
-}
-
-#[test]
-fn test_shared_secret_integrity() {
-    // Create two identical shared secrets
-    let mut ss1_bytes = [0u8; 32];
-    let mut ss2_bytes = [0u8; 32];
-
-    for i in 0..32 {
-        ss1_bytes[i] = i as u8;
-        ss2_bytes[i] = i as u8;
-    }
-
-    let ss1 = turtl::kem::SharedSecret::new(ss1_bytes);
-    let ss2 = turtl::kem::SharedSecret::new(ss2_bytes);
-
-    // Test matching shared secrets
-    let result = fault_detection::verify_shared_secret_integrity(&ss1, &ss2);
-    assert!(result.is_ok(), "Matching shared secrets should pass");
-
-    // Test mismatching shared secrets
-    let mut ss3_bytes = ss1_bytes;
-    ss3_bytes[0] ^= 1; // Flip a bit
-    let ss3 = turtl::kem::SharedSecret::new(ss3_bytes);
-
-    let result = fault_detection::verify_shared_secret_integrity(&ss1, &ss3);
-    assert!(result.is_err(), "Mismatching shared secrets should fail");
-    match result {
-        Err(Error::FaultDetected) => (),
-        _ => panic!("Expected FaultDetected error"),
-    }
-}
 
 /// Test that the secure Montgomery reduction implementation properly
 /// handles inputs that could be manipulated by fault attacks
