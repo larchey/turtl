@@ -600,7 +600,14 @@ fn reject_sample_ntt(seed: &[u8], ntt_ctx: &NTTContext) -> Result<Polynomial> {
     let mut ctx = hash::SHAKE128Context::init();
     ctx.absorb(seed);
 
+    // Generous cap so an adversarial/degenerate seed cannot hang the process.
+    let mut iterations = 0;
     while j < 256 {
+        if iterations >= 10_000 {
+            return Err(Error::RandomnessError);
+        }
+        iterations += 1;
+
         let bytes = ctx.squeeze(3);
 
         // CoeffFromThreeBytes: 23-bit little-endian value (top bit of b2 cleared)
@@ -822,8 +829,14 @@ fn sample_uniform_poly(seed: &[u8], gamma1: usize) -> Result<Polynomial> {
 
     for i in 0..256 {
         let mut valid_coeff = false;
+        let mut iterations = 0;
 
         while !valid_coeff {
+            if iterations >= 10_000 {
+                return Err(Error::RandomnessError);
+            }
+            iterations += 1;
+
             let bytes = ctx.squeeze(bytes_per_coeff);
 
             // Convert bytes to an integer (little-endian)

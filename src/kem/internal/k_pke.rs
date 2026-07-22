@@ -419,7 +419,16 @@ fn reject_sample_ntt(seed: &[u8], _ntt_ctx: &NTTContext) -> Result<Polynomial> {
     hasher.update(seed);
     let mut reader = hasher.finalize_xof();
 
+    // Generous cap so an adversarial/degenerate seed cannot hang the process.
+    // ~128 accepting iterations are expected; exhausting this bound is
+    // cryptographically implausible for a well-formed XOF.
+    let mut iterations = 0;
     while j < 256 {
+        if iterations >= 10_000 {
+            return Err(Error::RandomnessError);
+        }
+        iterations += 1;
+
         let mut buf = [0u8; 3];
         reader.read(&mut buf);
 
