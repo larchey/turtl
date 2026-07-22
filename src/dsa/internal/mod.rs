@@ -13,30 +13,6 @@ pub(crate) fn seed_to_keypair(
     seed: &[u8; 32],
     parameter_set: ParameterSet,
 ) -> Result<super::KeyPair> {
-    #[cfg(test)]
-    {
-        if let ParameterSet::TestSmall = parameter_set {
-            // For test parameter set, use a completely deterministic approach
-            // Create fixed seeds for each component
-            let mut fixed_seed = [0u8; 32];
-            for i in 0..32 {
-                fixed_seed[i] = (i % 256) as u8;
-            }
-
-            // Call the internal key generation with fixed seed
-            let (public_key_bytes, private_key_bytes) =
-                ml_dsa_keygen_internal(&fixed_seed, parameter_set)?;
-
-            // Create public and private key objects
-            let public_key = PublicKey::new(public_key_bytes, parameter_set)?;
-            let private_key = PrivateKey::new(private_key_bytes, parameter_set)?;
-
-            // Return the key pair
-            return super::KeyPair::from_keys(public_key, private_key);
-        }
-    }
-
-    // For non-test paths, use the provided seed
     // Call the internal key generation function
     let (public_key_bytes, private_key_bytes) = ml_dsa_keygen_internal(seed, parameter_set)?;
 
@@ -1143,21 +1119,8 @@ fn encode_public_key(
     // Calculate t1 size - coefficients are in [0, (q-1)/2^d]
     let max_value = (8380417 - 1) >> d;
     let bits_per_coeff = bitlen(max_value as u32);
-    let _t1_size = k * (256usize * bits_per_coeff).div_ceil(8);
 
-    #[cfg(test)]
-    let public_key_size = match parameter_set {
-        ParameterSet::TestSmall => {
-            // Use actual calculated size for test parameter
-            32 + _t1_size
-        }
-        _ => parameter_set.public_key_size(),
-    };
-
-    #[cfg(not(test))]
-    let public_key_size = parameter_set.public_key_size();
-
-    let mut public_key = Vec::with_capacity(public_key_size);
+    let mut public_key = Vec::with_capacity(parameter_set.public_key_size());
 
     // Add rho
     public_key.extend_from_slice(rho);
@@ -1185,33 +1148,10 @@ fn encode_private_key(
     let eta = parameter_set.eta();
     let d = parameter_set.d();
 
-    // Calculate sizes
-    let s_max_value = eta as u32;
-    let _s_bits_per_coeff = bitlen(2 * s_max_value);
-    #[cfg(test)]
-    let s_size = (l + k) * (256 * _s_bits_per_coeff).div_ceil(8);
-
     let t0_max_value = (1 << d) - 1;
     let t0_bits_per_coeff = bitlen(t0_max_value);
-    #[cfg(test)]
-    let t0_size = k * (256 * t0_bits_per_coeff).div_ceil(8);
 
-    // Calculate private key size
-    #[cfg(test)]
-    let base_size = 32 + 32 + 64; // rho + key + tr
-    #[cfg(test)]
-    let calculated_size = base_size + s_size + t0_size;
-
-    #[cfg(test)]
-    let private_key_size = match parameter_set {
-        ParameterSet::TestSmall => calculated_size,
-        _ => parameter_set.private_key_size(),
-    };
-
-    #[cfg(not(test))]
-    let private_key_size = parameter_set.private_key_size();
-
-    let mut private_key = Vec::with_capacity(private_key_size);
+    let mut private_key = Vec::with_capacity(parameter_set.private_key_size());
 
     // Add rho, key, tr
     private_key.extend_from_slice(rho);
@@ -1654,33 +1594,8 @@ fn encode_signature(
     let (_k, l) = parameter_set.dimensions();
     let gamma1 = parameter_set.gamma1();
     let omega = parameter_set.omega();
-    #[cfg(test)]
-    let lambda = parameter_set.lambda();
 
-    // Calculate signature size
-    let z_bits_per_coeff = bitlen((2 * gamma1 - 2) as u32);
-    let _z_bytes_per_poly = (256 * z_bits_per_coeff).div_ceil(8);
-    #[cfg(test)]
-    let z_size = l * _z_bytes_per_poly;
-
-    // Calculate hint size
-    #[cfg(test)]
-    let h_size = omega + _k;
-
-    // Calculate the signature size
-    #[cfg(test)]
-    let calculated_size = lambda / 4 + z_size + h_size;
-
-    #[cfg(test)]
-    let sig_size = match parameter_set {
-        ParameterSet::TestSmall => calculated_size,
-        _ => parameter_set.signature_size(),
-    };
-
-    #[cfg(not(test))]
-    let sig_size = parameter_set.signature_size();
-
-    let mut signature = Vec::with_capacity(sig_size);
+    let mut signature = Vec::with_capacity(parameter_set.signature_size());
 
     // Add c_tilde
     signature.extend_from_slice(c_tilde);

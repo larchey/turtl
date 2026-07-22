@@ -92,13 +92,6 @@ pub enum ParameterSet {
     ///
     /// FIPS 204 Table 1
     MlDsa87,
-
-    /// Small test parameter set - not for production use!
-    ///
-    /// This parameter set uses much smaller parameters for faster testing.
-    /// It provides no security and must never be used in production.
-    #[cfg(test)]
-    TestSmall,
 }
 
 // Create a newtype wrapper for ParameterSet to avoid the conflicting impl
@@ -132,8 +125,6 @@ impl ParameterSet {
             Self::MlDsa44 => (4, 4),
             Self::MlDsa65 => (6, 5),
             Self::MlDsa87 => (8, 7),
-            #[cfg(test)]
-            Self::TestSmall => (2, 2),
         }
     }
 
@@ -177,8 +168,6 @@ impl ParameterSet {
             Self::MlDsa44 => 39,
             Self::MlDsa65 => 49,
             Self::MlDsa87 => 60,
-            #[cfg(test)]
-            Self::TestSmall => 5, // Smaller value for testing
         }
     }
 
@@ -188,8 +177,6 @@ impl ParameterSet {
             Self::MlDsa44 => 1 << 17,
             Self::MlDsa65 => 1 << 19,
             Self::MlDsa87 => 1 << 19,
-            #[cfg(test)]
-            Self::TestSmall => 1 << 10, // Much smaller for testing
         }
     }
 
@@ -200,8 +187,6 @@ impl ParameterSet {
             Self::MlDsa44 => 95232,  // Exact value: (8380417 - 1) / 88 = 95232
             Self::MlDsa65 => 261888, // Exact value: (8380417 - 1) / 32 = 261888
             Self::MlDsa87 => 261888, // Exact value: (8380417 - 1) / 32 = 261888
-            #[cfg(test)]
-            Self::TestSmall => 4190, // Using a much smaller value for testing
         }
     }
 
@@ -211,8 +196,6 @@ impl ParameterSet {
             Self::MlDsa44 => 2,
             Self::MlDsa65 => 4,
             Self::MlDsa87 => 2,
-            #[cfg(test)]
-            Self::TestSmall => 1, // Minimal for testing
         }
     }
 
@@ -227,8 +210,6 @@ impl ParameterSet {
             Self::MlDsa44 => 80,
             Self::MlDsa65 => 55,
             Self::MlDsa87 => 75,
-            #[cfg(test)]
-            Self::TestSmall => 10, // Smaller for testing
         }
     }
 
@@ -238,8 +219,6 @@ impl ParameterSet {
             Self::MlDsa44 => 128,
             Self::MlDsa65 => 192,
             Self::MlDsa87 => 256,
-            #[cfg(test)]
-            Self::TestSmall => 64, // Smaller for testing
         }
     }
 
@@ -249,8 +228,6 @@ impl ParameterSet {
             Self::MlDsa44 => 1312,
             Self::MlDsa65 => 1952,
             Self::MlDsa87 => 2592,
-            #[cfg(test)]
-            Self::TestSmall => 500, // Approximate for testing
         }
     }
 
@@ -260,8 +237,6 @@ impl ParameterSet {
             Self::MlDsa44 => 2560,
             Self::MlDsa65 => 4032,
             Self::MlDsa87 => 4896,
-            #[cfg(test)]
-            Self::TestSmall => 800, // Approximate for testing
         }
     }
 
@@ -271,8 +246,6 @@ impl ParameterSet {
             Self::MlDsa44 => 2420,
             Self::MlDsa65 => 3309,
             Self::MlDsa87 => 4627,
-            #[cfg(test)]
-            Self::TestSmall => 600, // Approximate for testing
         }
     }
 
@@ -288,8 +261,6 @@ impl ParameterSet {
             Self::MlDsa44 => 2,
             Self::MlDsa65 => 3,
             Self::MlDsa87 => 5,
-            #[cfg(test)]
-            Self::TestSmall => 1, // Testing only, not secure
         }
     }
 
@@ -299,8 +270,6 @@ impl ParameterSet {
             Self::MlDsa44 => 192, // Recommended: 192, Minimum: 128
             Self::MlDsa65 => 192,
             Self::MlDsa87 => 256,
-            #[cfg(test)]
-            Self::TestSmall => 128, // Minimum for testing
         }
     }
 }
