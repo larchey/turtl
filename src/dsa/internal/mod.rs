@@ -155,11 +155,6 @@ pub(crate) fn ml_dsa_sign_internal(
     // Set a maximum number of attempts to prevent infinite loops
     const MAX_ATTEMPTS: u16 = 1000;
 
-    // Debug counters
-    let mut z_rejections = 0;
-    let mut r0_rejections = 0;
-    let mut hint_rejections = 0;
-
     // Loop until a valid signature is found or max attempts reached
     while kappa < MAX_ATTEMPTS {
         // Generate y (in centered representation [-gamma1+1, gamma1-1])
@@ -234,7 +229,6 @@ pub(crate) fn ml_dsa_sign_internal(
         }
 
         if !z_ok {
-            z_rejections += 1;
             kappa += 1;
             continue;
         }
@@ -265,7 +259,6 @@ pub(crate) fn ml_dsa_sign_internal(
         }
 
         if !r0_ok {
-            r0_rejections += 1;
             kappa += 1;
             continue;
         }
@@ -296,7 +289,6 @@ pub(crate) fn ml_dsa_sign_internal(
 
         // Check if number of 1's is within limit
         if ones_count > omega {
-            hint_rejections += 1;
             kappa += 1;
             continue;
         }
@@ -311,11 +303,7 @@ pub(crate) fn ml_dsa_sign_internal(
         return encode_signature(&c_tilde, &z_centered, &h, parameter_set);
     }
 
-    // If we've reached the maximum number of attempts, return an error
-    eprintln!("Signing failed after {} attempts:", MAX_ATTEMPTS);
-    eprintln!("  z rejections: {}", z_rejections);
-    eprintln!("  r0 rejections: {}", r0_rejections);
-    eprintln!("  hint rejections: {}", hint_rejections);
+    // Exhausted the attempt budget without producing a valid signature.
     Err(Error::RandomnessError)
 }
 
@@ -1259,13 +1247,6 @@ fn decode_public_key(
 
     // Check if we have enough bytes for the t1 polynomials
     if public_key_bytes.len() < 32 + k * bytes_per_poly {
-        #[cfg(test)]
-        eprintln!(
-            "Insufficient public key length: {} bytes, need at least {} bytes",
-            public_key_bytes.len(),
-            32 + k * bytes_per_poly
-        );
-
         return Err(Error::InvalidPublicKey);
     }
 
@@ -1331,13 +1312,6 @@ fn decode_private_key(
                        (k * t0_bytes_per_poly); // t0
 
     if private_key_bytes.len() < required_size {
-        #[cfg(test)]
-        eprintln!(
-            "Invalid private key length: {} bytes, need {} bytes",
-            private_key_bytes.len(),
-            required_size
-        );
-
         return Err(Error::InvalidPrivateKey);
     }
 
@@ -1420,13 +1394,6 @@ fn decode_signature(
     let required_size = lambda / 4 + (l * z_bytes_per_poly) + omega + k;
 
     if signature_bytes.len() < required_size {
-        #[cfg(test)]
-        eprintln!(
-            "Invalid signature length: {} bytes, need {} bytes",
-            signature_bytes.len(),
-            required_size
-        );
-
         return Err(Error::InvalidSignature);
     }
 
