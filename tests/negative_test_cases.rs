@@ -238,10 +238,6 @@ fn test_random_ciphertext_accepted() {
     // failing explicitly. This prevents timing attacks.
 }
 
-// NOTE: The following signature verification tests are currently DISABLED due to a critical bug
-// in the ML-DSA signing implementation. The signing algorithm is hitting the maximum retry
-// limit (1000 attempts) and failing with RandomnessError. This is caused by coefficient
-// clamping issues that need to be investigated and fixed.
 /// Test signature verification with wrong public key
 #[test]
 fn test_verify_with_wrong_key() {
