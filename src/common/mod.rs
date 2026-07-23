@@ -13,4 +13,3 @@ pub mod hash;
 pub mod ntt;
 pub mod poly;
 pub mod ring;
-pub mod sample;

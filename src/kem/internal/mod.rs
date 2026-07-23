@@ -10,65 +10,55 @@ use crate::kem::{Ciphertext, ParameterSet, PrivateKey, PublicKey, SharedSecret};
 pub mod aux;
 pub mod k_pke;
 
-/// Generate a keypair from a seed.
+/// Generate a keypair from the two 32-byte seeds d and z (FIPS 203 KeyGen_internal).
 pub(crate) fn seed_to_keypair(
-    seed: &[u8; 32],
+    d: &[u8; 32],
+    z: &[u8; 32],
     parameter_set: ParameterSet,
 ) -> Result<super::KeyPair> {
-    // Call the internal key generation function
-    let (public_key_bytes, private_key_bytes) = ml_kem_keygen_internal(seed, parameter_set)?;
+    let (public_key_bytes, private_key_bytes) = ml_kem_keygen_internal(d, z, parameter_set)?;
 
-    // Create public and private key objects
     let public_key = PublicKey::new(public_key_bytes, parameter_set)?;
     let private_key = PrivateKey::new(private_key_bytes, parameter_set)?;
 
-    // Return the key pair
     super::KeyPair::from_keys(public_key, private_key)
 }
 
-/// Internal function for ML-KEM key generation
+/// ML-KEM.KeyGen_internal (FIPS 203): expand d into (rho, sigma) with G, and
+/// append the independent implicit-rejection value z to the private key.
 pub(crate) fn ml_kem_keygen_internal(
-    seed: &[u8; 32],
+    d: &[u8; 32],
+    z: &[u8; 32],
     parameter_set: ParameterSet,
 ) -> Result<(Vec<u8>, Vec<u8>)> {
-    // Implementation of ML-KEM.KeyGen_internal from FIPS 203
-
-    // 1. Expand the seed to get rho, rho', and K
     let k = parameter_set.k();
-    let mut data = Vec::with_capacity(seed.len() + 2);
-    data.extend_from_slice(seed);
-    data.push(k as u8);
-    data.push(0);
-    let expanded = hash::h_function(&data, 128);
 
-    let mut rho = [0u8; 32];
-    let mut rhoprime = [0u8; 64];
-    let mut key_seed = [0u8; 32];
+    // 1. (rho, sigma) = G(d || k), where G = SHA3-512.
+    let mut g_input = Vec::with_capacity(33);
+    g_input.extend_from_slice(d);
+    g_input.push(k as u8);
+    let (rho, sigma) = hash::g_function(&g_input);
 
-    rho.copy_from_slice(&expanded[0..32]);
-    rhoprime.copy_from_slice(&expanded[32..96]);
-    key_seed.copy_from_slice(&expanded[96..128]);
+    // 2-4. Generate matrix A-hat, secret vector s, and error vector e
+    let (matrix_a, s, e) = k_pke::generate_key_components(&rho, &sigma, parameter_set)?;
 
-    // 2-4. Generate matrix A, secret vector s, and error vector e
-    let (matrix_a, s, e) = k_pke::generate_key_components(&rho, &rhoprime, parameter_set)?;
+    // 5. Compute t-hat = A-hat·s-hat + e-hat (all in the NTT domain, FIPS 203)
+    let (t_hat, s_hat) = k_pke::compute_public_t(&matrix_a, &s, &e)?;
 
-    // 5. Compute t = A·s + e
-    let t = k_pke::compute_public_t(&matrix_a, &s, &e)?;
+    // 6-7. Encode the public key: ek_pke = ByteEncode_12(t-hat) || ρ
+    let public_key_bytes = k_pke::encode_public_key(&rho, &t_hat, parameter_set)?;
 
-    // 6-7. Encode the public key: ek_pke = ρ || ByteEncode_12(t)
-    let public_key_bytes = k_pke::encode_public_key(&rho, &t, parameter_set)?;
-
-    // 8. Compute H(ek_pke) - SHA3-256 hash (32 bytes)
-    let tr = hash::h_function(&public_key_bytes, 32);
+    // 8. Compute H(ek_pke) = SHA3-256(ek_pke) (32 bytes), per FIPS 203
+    let tr = hash::sha3_256(&public_key_bytes).to_vec();
 
     // 9-10. Encode the private key: dk_pke || ek_pke || H(ek_pke) || z
-    // where dk_pke = ByteEncode_12(s)
-    let dk_pke = k_pke::encode_private_key_pke(&s)?;
+    // where dk_pke = ByteEncode_12(s-hat) (NTT domain, FIPS 203)
+    let dk_pke = k_pke::encode_private_key_pke(&s_hat)?;
     let mut private_key_bytes = Vec::new();
     private_key_bytes.extend(&dk_pke);
     private_key_bytes.extend(&public_key_bytes);
     private_key_bytes.extend(&tr);
-    private_key_bytes.extend(&key_seed);
+    private_key_bytes.extend(z);
 
     Ok((public_key_bytes, private_key_bytes))
 }
@@ -81,8 +71,8 @@ pub(crate) fn ml_kem_encaps_internal(
 ) -> Result<(Vec<u8>, [u8; 32])> {
     // Implementation of ML-KEM.Encaps_internal from FIPS 203
 
-    // 1. Derive key K and randomness r from message and hash of public key
-    let public_key_hash = hash::h_function(public_key_bytes, 32);
+    // 1. Derive key K and randomness r from message and H(ek) = SHA3-256(ek)
+    let public_key_hash = hash::sha3_256(public_key_bytes).to_vec();
     let mut msg_data = Vec::with_capacity(message.len() + public_key_hash.len());
     msg_data.extend_from_slice(message);
     msg_data.extend_from_slice(&public_key_hash);
@@ -99,9 +89,8 @@ pub(crate) fn ml_kem_decaps_internal(
     private_key_bytes: &[u8],
     ciphertext: &[u8],
     parameter_set: ParameterSet,
-) -> Result<([u8; 32], Vec<u8>)> {
+) -> Result<[u8; 32]> {
     // Implementation of ML-KEM.Decaps_internal from FIPS 203
-    // Enhanced with fault attack countermeasures
 
     // 1-4. Extract components from the private key
     let (dk_pke, ek_pke, h, z) = k_pke::decode_private_key(private_key_bytes, parameter_set)?;
@@ -121,30 +110,20 @@ pub(crate) fn ml_kem_decaps_internal(
     // 9. Re-encrypt using derived randomness
     let c_prime = k_pke::encrypt(&ek_pke, &m_prime, &r_prime, parameter_set)?;
 
-    // 10-11. Check if ciphertexts match and select the appropriate key
-    let mut k = [0u8; 32];
-
-    // Use our security module for constant-time operations
+    // 10-11. Select K' if the ciphertext re-encrypts correctly, else the
+    // implicit-rejection value K_bar — in constant time.
     use crate::security::constant_time;
     use crate::security::fault_detection;
 
-    // First check lengths - this reveals length but that's not security sensitive
-    let lengths_match = ciphertext.len() == c_prime.len();
+    let is_equal =
+        ciphertext.len() == c_prime.len() && fault_detection::ct_eq(ciphertext, &c_prime);
 
-    // Only do the comparison if lengths match (preserves constant-time for valid inputs)
-    let is_equal = if lengths_match {
-        fault_detection::ct_eq(ciphertext, &c_prime)
-    } else {
-        false
-    };
-
-    // For each byte of the shared secret, select between k_prime and k_bar in constant time
+    let mut k = [0u8; 32];
     for i in 0..32 {
         k[i] = constant_time::ct_select_byte(k_prime[i], k_bar[i], is_equal);
     }
 
-    // Return both the shared secret and the re-encrypted ciphertext for fault detection
-    Ok((k, c_prime))
+    Ok(k)
 }
 
 pub(crate) fn encapsulate_internal(public_key: &PublicKey) -> Result<(Ciphertext, SharedSecret)> {
@@ -173,35 +152,11 @@ pub(crate) fn decapsulate_internal(
         return Err(Error::InvalidParameterSet);
     }
 
-    // Call the internal decapsulation function with re-encryption for verification
-    let (shared_secret_bytes, re_encrypted_ciphertext) = ml_kem_decaps_internal(
+    let shared_secret_bytes = ml_kem_decaps_internal(
         private_key.as_bytes(),
         ciphertext.as_bytes(),
         private_key.parameter_set(),
     )?;
 
-    // Create shared secret object
-    let shared_secret = SharedSecret::new(shared_secret_bytes);
-
-    // Create a new ciphertext from the re-encrypted bytes for verification
-    let re_encrypted = Ciphertext::new(re_encrypted_ciphertext, private_key.parameter_set())?;
-
-    // Use the security module for constant-time operations and fault detection
-    use crate::security::fault_detection;
-
-    // Verify the re-encryption result in constant time
-    // In ML-KEM, not all cases pass this check by design (implicit rejection)
-    // This check is done but the result isn't used directly (handled by k_bar selection)
-    let _verification_result =
-        fault_detection::ct_eq(ciphertext.as_bytes(), re_encrypted.as_bytes());
-
-    // Note: We're not explicitly handling verification failure here because the ml_kem_decaps_internal
-    // function already handles the implicit rejection case by using k_bar when ciphertexts don't match.
-    // This verification step is an additional security measure for fault detection.
-
-    // Verify integrity of the shared secret (detect fault attacks during processing)
-    let shared_secret_copy = shared_secret.clone();
-    fault_detection::verify_shared_secret_integrity(&shared_secret, &shared_secret_copy)?;
-
-    Ok(shared_secret)
+    Ok(SharedSecret::new(shared_secret_bytes))
 }

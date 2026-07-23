@@ -13,30 +13,6 @@ pub(crate) fn seed_to_keypair(
     seed: &[u8; 32],
     parameter_set: ParameterSet,
 ) -> Result<super::KeyPair> {
-    #[cfg(test)]
-    {
-        if let ParameterSet::TestSmall = parameter_set {
-            // For test parameter set, use a completely deterministic approach
-            // Create fixed seeds for each component
-            let mut fixed_seed = [0u8; 32];
-            for i in 0..32 {
-                fixed_seed[i] = (i % 256) as u8;
-            }
-
-            // Call the internal key generation with fixed seed
-            let (public_key_bytes, private_key_bytes) =
-                ml_dsa_keygen_internal(&fixed_seed, parameter_set)?;
-
-            // Create public and private key objects
-            let public_key = PublicKey::new(public_key_bytes, parameter_set)?;
-            let private_key = PrivateKey::new(private_key_bytes, parameter_set)?;
-
-            // Return the key pair
-            return super::KeyPair::from_keys(public_key, private_key);
-        }
-    }
-
-    // For non-test paths, use the provided seed
     // Call the internal key generation function
     let (public_key_bytes, private_key_bytes) = ml_dsa_keygen_internal(seed, parameter_set)?;
 
@@ -155,11 +131,6 @@ pub(crate) fn ml_dsa_sign_internal(
     // Set a maximum number of attempts to prevent infinite loops
     const MAX_ATTEMPTS: u16 = 1000;
 
-    // Debug counters
-    let mut z_rejections = 0;
-    let mut r0_rejections = 0;
-    let mut hint_rejections = 0;
-
     // Loop until a valid signature is found or max attempts reached
     while kappa < MAX_ATTEMPTS {
         // Generate y (in centered representation [-gamma1+1, gamma1-1])
@@ -234,7 +205,6 @@ pub(crate) fn ml_dsa_sign_internal(
         }
 
         if !z_ok {
-            z_rejections += 1;
             kappa += 1;
             continue;
         }
@@ -265,7 +235,6 @@ pub(crate) fn ml_dsa_sign_internal(
         }
 
         if !r0_ok {
-            r0_rejections += 1;
             kappa += 1;
             continue;
         }
@@ -296,7 +265,6 @@ pub(crate) fn ml_dsa_sign_internal(
 
         // Check if number of 1's is within limit
         if ones_count > omega {
-            hint_rejections += 1;
             kappa += 1;
             continue;
         }
@@ -311,11 +279,7 @@ pub(crate) fn ml_dsa_sign_internal(
         return encode_signature(&c_tilde, &z_centered, &h, parameter_set);
     }
 
-    // If we've reached the maximum number of attempts, return an error
-    eprintln!("Signing failed after {} attempts:", MAX_ATTEMPTS);
-    eprintln!("  z rejections: {}", z_rejections);
-    eprintln!("  r0 rejections: {}", r0_rejections);
-    eprintln!("  hint rejections: {}", hint_rejections);
+    // Exhausted the attempt budget without producing a valid signature.
     Err(Error::RandomnessError)
 }
 
@@ -448,7 +412,6 @@ pub(crate) fn ml_dsa_verify_internal(
     c_prime_data.extend_from_slice(&w1_encoded);
     let c_prime = hash::h_function(&c_prime_data, parameter_set.lambda() / 4);
 
-    // Compare c_tilde and c_prime
     // Compare c_tilde and c_prime
     Ok(c_tilde == c_prime)
 }
@@ -602,7 +565,10 @@ fn expand_a(rho: &[u8], k: usize, l: usize) -> Result<Vec<Vec<Polynomial>>> {
     Ok(matrix_a)
 }
 
-/// Rejection sampling in NTT domain
+/// Rejection sampling of a uniform NTT-domain polynomial (FIPS 204 RejNTTPoly).
+///
+/// ML-DSA coefficients are ~23 bits (q = 8380417), so each candidate is built
+/// from 3 bytes via CoeffFromThreeBytes (mask the top bit, reject if >= q).
 fn reject_sample_ntt(seed: &[u8], ntt_ctx: &NTTContext) -> Result<Polynomial> {
     let mut poly = Polynomial::new();
     let mut j = 0;
@@ -610,21 +576,23 @@ fn reject_sample_ntt(seed: &[u8], ntt_ctx: &NTTContext) -> Result<Polynomial> {
     let mut ctx = hash::SHAKE128Context::init();
     ctx.absorb(seed);
 
+    // Generous cap so an adversarial/degenerate seed cannot hang the process.
+    let mut iterations = 0;
     while j < 256 {
+        if iterations >= 10_000 {
+            return Err(Error::RandomnessError);
+        }
+        iterations += 1;
+
         let bytes = ctx.squeeze(3);
 
-        // Extract two values from 3 bytes
-        let d1 = ((bytes[0] as u32) | ((bytes[1] as u32 & 0x0F) << 8)) as i32;
-        let d2 = (((bytes[1] as u32 & 0xF0) >> 4) | ((bytes[2] as u32) << 4)) as i32;
+        // CoeffFromThreeBytes: 23-bit little-endian value (top bit of b2 cleared)
+        let coeff =
+            (bytes[0] as u32) | ((bytes[1] as u32) << 8) | (((bytes[2] as u32) & 0x7F) << 16);
 
         // Reject values that are not in [0, q-1]
-        if d1 < ntt_ctx.modulus {
-            poly.coeffs[j] = d1;
-            j += 1;
-        }
-
-        if j < 256 && d2 < ntt_ctx.modulus {
-            poly.coeffs[j] = d2;
+        if (coeff as i32) < ntt_ctx.modulus {
+            poly.coeffs[j] = coeff as i32;
             j += 1;
         }
     }
@@ -642,28 +610,33 @@ fn expand_s(
 ) -> Result<(Vec<Polynomial>, Vec<Polynomial>)> {
     let mut s1 = Vec::with_capacity(l);
     let mut s2 = Vec::with_capacity(k);
-    let mut counter = 0u8;
 
-    // Sample s1
-    for _i in 0..l {
-        let seed = [sigma, &[counter]].concat();
-        counter += 1;
-        let s1_i = sample_bounded_poly(&seed, eta)?;
-        s1.push(s1_i);
+    // FIPS 204 ExpandS: nonce is a 2-byte little-endian integer; s1 uses
+    // nonces 0..l and s2 uses nonces l..l+k.
+    for i in 0..l {
+        let seed = [sigma, &(i as u16).to_le_bytes()].concat();
+        s1.push(sample_bounded_poly(&seed, eta)?);
     }
-
-    // Sample s2
-    for _i in 0..k {
-        let seed = [sigma, &[counter]].concat();
-        counter += 1;
-        let s2_i = sample_bounded_poly(&seed, eta)?;
-        s2.push(s2_i);
+    for i in 0..k {
+        let seed = [sigma, &((l + i) as u16).to_le_bytes()].concat();
+        s2.push(sample_bounded_poly(&seed, eta)?);
     }
 
     Ok((s1, s2))
 }
 
-/// Sample a polynomial with coefficients in [-eta, eta]
+/// Map a half-byte to a coefficient in [-eta, eta] (FIPS 204 CoeffFromHalfByte).
+///
+/// Returns None when the value must be rejected.
+fn coeff_from_half_byte(b: u8, eta: usize) -> Option<i32> {
+    match eta {
+        2 if b < 15 => Some(2 - (b as i32 % 5)),
+        4 if b < 9 => Some(4 - b as i32),
+        _ => None,
+    }
+}
+
+/// Sample a polynomial with coefficients in [-eta, eta] (FIPS 204 RejBoundedPoly).
 fn sample_bounded_poly(seed: &[u8], eta: usize) -> Result<Polynomial> {
     let mut poly = Polynomial::new();
 
@@ -672,34 +645,25 @@ fn sample_bounded_poly(seed: &[u8], eta: usize) -> Result<Polynomial> {
 
     let mut j = 0;
     let mut iterations = 0;
-    let max_iterations = 1024; // Safety limit - increased for correct rejection sampling
-
-    // FIPS 204: Sample coefficients in [-eta, eta] using rejection sampling
-    // Accept nibble values in [0, 2*eta], which map to [-eta, eta] after subtracting eta
-    let threshold = 2 * eta + 1;
-
-    while j < 256 && iterations < max_iterations {
+    while j < 256 {
+        if iterations >= 10_000 {
+            return Err(Error::RandomnessError);
+        }
         iterations += 1;
+
         let byte = ctx.squeeze(1)[0];
 
-        // Extract two values from each byte
-        let b1 = byte & 0x0F;
-        let b2 = byte >> 4;
-
-        // Rejection sampling: accept if value in valid range
-        if usize::from(b1) < threshold {
-            poly.coeffs[j] = (b1 as i32) - (eta as i32);
+        // Low nibble first, then high nibble.
+        if let Some(c) = coeff_from_half_byte(byte & 0x0F, eta) {
+            poly.coeffs[j] = c;
             j += 1;
         }
-
-        if j < 256 && usize::from(b2) < threshold {
-            poly.coeffs[j] = (b2 as i32) - (eta as i32);
-            j += 1;
+        if j < 256 {
+            if let Some(c) = coeff_from_half_byte(byte >> 4, eta) {
+                poly.coeffs[j] = c;
+                j += 1;
+            }
         }
-    }
-
-    if j < 256 {
-        return Err(Error::RandomnessError);
     }
 
     Ok(poly)
@@ -754,16 +718,22 @@ fn power2round(t: &[Polynomial], d: usize) -> Result<(Vec<Polynomial>, Vec<Polyn
     let mut t1 = Vec::with_capacity(k);
     let mut t0 = Vec::with_capacity(k);
 
+    let q: i32 = 8380417;
+    let two_d = 1i32 << d;
     for i in 0..k {
         let mut t1_i = Polynomial::new();
         let mut t0_i = Polynomial::new();
 
         for j in 0..256 {
-            // Compute t1 = ⌊t/2^d⌋
-            t1_i.coeffs[j] = t[i].coeffs[j] >> d;
-
-            // Compute t0 = t - t1*2^d
-            t0_i.coeffs[j] = t[i].coeffs[j] - (t1_i.coeffs[j] << d);
+            // FIPS 204 Power2Round: r0 is the centered remainder mod 2^d, so
+            // t1 = round(r / 2^d) rather than floor.
+            let r = t[i].coeffs[j].rem_euclid(q);
+            let mut r0 = r & (two_d - 1);
+            if r0 > two_d / 2 {
+                r0 -= two_d;
+            }
+            t1_i.coeffs[j] = (r - r0) >> d;
+            t0_i.coeffs[j] = r0;
         }
 
         t1.push(t1_i);
@@ -773,53 +743,36 @@ fn power2round(t: &[Polynomial], d: usize) -> Result<(Vec<Polynomial>, Vec<Polyn
     Ok((t1, t0))
 }
 
-/// Sample a polynomial with exactly tau +/-1 coefficients
+/// Sample a polynomial with exactly tau +/-1 coefficients (FIPS 204 Algorithm 29).
+///
+/// The first 8 squeezed bytes provide 64 sign bits; positions are then chosen by
+/// rejection sampling one byte at a time (j <= i), giving a byte-exact, unbiased
+/// mapping from c_tilde to the challenge polynomial.
 fn sample_in_ball(seed: &[u8], tau: usize) -> Result<Polynomial> {
     use crate::security::fault_detection;
     let mut poly = Polynomial::new();
 
-    // Verify tau is reasonable
-    fault_detection::verify_bounds(tau, 1, 128).map_err(|_| Error::RandomnessError)?;
+    // FIPS 204 uses tau <= 64 (fits within the 64 sign bits).
+    fault_detection::verify_bounds(tau, 1, 64).map_err(|_| Error::RandomnessError)?;
 
-    // Create a new context for each call to avoid state issues
     let mut ctx = hash::SHAKE256Context::init();
     ctx.absorb(seed);
 
-    // Generate sign bits
-    let sign_bytes = ctx.squeeze(32);
-    let sign_bits = bytes_to_bits(&sign_bytes);
+    // First 8 bytes = 64 sign bits, consumed LSB-first as they are used.
+    let sign_bytes = ctx.squeeze(8);
+    let signs = u64::from_le_bytes(sign_bytes.as_slice().try_into().unwrap());
 
-    // Use Fisher-Yates algorithm to select positions with timeout protection
-    let mut indices = Vec::with_capacity(256);
-    for i in 0..256 {
-        indices.push(i);
-    }
+    for (sign_idx, i) in ((256 - tau)..256).enumerate() {
+        // Rejection-sample j in [0, i] one byte at a time.
+        let j = loop {
+            let b = ctx.squeeze(1)[0] as usize;
+            if b <= i {
+                break b;
+            }
+        };
 
-    // For each position from the end, swap with a random earlier position
-    let mut rng_bytes = ctx.squeeze((256 - tau) * 2); // Get all random bytes at once
-    let mut byte_pos = 0;
-
-    for i in (256 - tau)..256 {
-        // Get random index j in [0..i]
-        if byte_pos + 2 > rng_bytes.len() {
-            // Get more bytes if needed
-            rng_bytes = ctx.squeeze(256);
-            byte_pos = 0;
-        }
-
-        let j = ((rng_bytes[byte_pos] as u16) | ((rng_bytes[byte_pos + 1] as u16) << 8))
-            % (i as u16 + 1);
-        byte_pos += 2;
-
-        // Swap positions i and j
-        indices.swap(i, j as usize);
-    }
-
-    // Set the selected positions to +/-1
-    for i in 0..tau {
-        let idx = indices[256 - tau + i];
-        let sign_bit = sign_bits[i % sign_bits.len()];
-        poly.coeffs[idx] = if sign_bit == 0 { 1 } else { -1 };
+        poly.coeffs[i] = poly.coeffs[j];
+        poly.coeffs[j] = if (signs >> sign_idx) & 1 == 1 { -1 } else { 1 };
     }
 
     Ok(poly)
@@ -851,8 +804,14 @@ fn sample_uniform_poly(seed: &[u8], gamma1: usize) -> Result<Polynomial> {
 
     for i in 0..256 {
         let mut valid_coeff = false;
+        let mut iterations = 0;
 
         while !valid_coeff {
+            if iterations >= 10_000 {
+                return Err(Error::RandomnessError);
+            }
+            iterations += 1;
+
             let bytes = ctx.squeeze(bytes_per_coeff);
 
             // Convert bytes to an integer (little-endian)
@@ -1093,64 +1052,31 @@ fn encode_w1(w1: &[Polynomial], gamma2: usize) -> Result<Vec<u8>> {
     Ok(result)
 }
 
-/// Encode hint for ML-DSA
+/// Encode hint for ML-DSA (FIPS 204 Algorithm 20, HintBitPack).
+///
+/// Layout: omega position bytes (hint positions, per-polynomial in ascending
+/// order) followed by k bytes holding the *cumulative* count of ones through
+/// each polynomial.
 fn encode_hint(h: &[Polynomial], omega: usize) -> Result<Vec<u8>> {
     let k = h.len();
-    let mut result = Vec::with_capacity(omega + k);
+    let mut result = vec![0u8; omega + k];
 
-    // First, gather all positions where coefficients are 1
-    let mut positions = Vec::new();
+    let mut index = 0usize;
     for i in 0..k {
         for j in 0..256 {
             if h[i].coeffs[j] == 1 {
-                positions.push((i, j));
+                if index >= omega {
+                    return Err(Error::EncodingError(format!(
+                        "Too many ones in hint, maximum allowed: {}",
+                        omega
+                    )));
+                }
+                result[index] = j as u8;
+                index += 1;
             }
         }
-    }
-
-    // Check if number of 1s is within limit
-    if positions.len() > omega {
-        return Err(Error::EncodingError(format!(
-            "Too many ones in hint: {}, maximum allowed: {}",
-            positions.len(),
-            omega
-        )));
-    }
-
-    // Sort positions to ensure canonical ordering
-    positions.sort_by(|a, b| {
-        if a.0 != b.0 {
-            a.0.cmp(&b.0)
-        } else {
-            a.1.cmp(&b.1)
-        }
-    });
-
-    // Store positions in the result
-    let mut idx = 0;
-    for (_i, j) in &positions {
-        if idx >= omega {
-            break;
-        }
-        result.push(*j as u8);
-        idx += 1;
-    }
-
-    // Fill remaining positions with zeros
-    while idx < omega {
-        result.push(0);
-        idx += 1;
-    }
-
-    // Store number of ones per polynomial
-    for i in 0..k {
-        let mut count = 0;
-        for (poly_idx, _) in &positions {
-            if *poly_idx == i {
-                count += 1;
-            }
-        }
-        result.push(count);
+        // Cumulative count of ones through polynomial i
+        result[omega + i] = index as u8;
     }
 
     Ok(result)
@@ -1192,21 +1118,8 @@ fn encode_public_key(
     // Calculate t1 size - coefficients are in [0, (q-1)/2^d]
     let max_value = (8380417 - 1) >> d;
     let bits_per_coeff = bitlen(max_value as u32);
-    let _t1_size = k * (256usize * bits_per_coeff).div_ceil(8);
 
-    #[cfg(test)]
-    let public_key_size = match parameter_set {
-        ParameterSet::TestSmall => {
-            // Use actual calculated size for test parameter
-            32 + _t1_size
-        }
-        _ => parameter_set.public_key_size(),
-    };
-
-    #[cfg(not(test))]
-    let public_key_size = parameter_set.public_key_size();
-
-    let mut public_key = Vec::with_capacity(public_key_size);
+    let mut public_key = Vec::with_capacity(parameter_set.public_key_size());
 
     // Add rho
     public_key.extend_from_slice(rho);
@@ -1234,33 +1147,11 @@ fn encode_private_key(
     let eta = parameter_set.eta();
     let d = parameter_set.d();
 
-    // Calculate sizes
-    let s_max_value = eta as u32;
-    let _s_bits_per_coeff = bitlen(2 * s_max_value);
-    #[cfg(test)]
-    let s_size = (l + k) * (256 * _s_bits_per_coeff).div_ceil(8);
+    // FIPS 204 packs t0 as a signed value in [-(2^(d-1)-1), 2^(d-1)].
+    let t0_a = (1usize << (d - 1)) - 1;
+    let t0_b = 1usize << (d - 1);
 
-    let t0_max_value = (1 << d) - 1;
-    let t0_bits_per_coeff = bitlen(t0_max_value);
-    #[cfg(test)]
-    let t0_size = k * (256 * t0_bits_per_coeff).div_ceil(8);
-
-    // Calculate private key size
-    #[cfg(test)]
-    let base_size = 32 + 32 + 64; // rho + key + tr
-    #[cfg(test)]
-    let calculated_size = base_size + s_size + t0_size;
-
-    #[cfg(test)]
-    let private_key_size = match parameter_set {
-        ParameterSet::TestSmall => calculated_size,
-        _ => parameter_set.private_key_size(),
-    };
-
-    #[cfg(not(test))]
-    let private_key_size = parameter_set.private_key_size();
-
-    let mut private_key = Vec::with_capacity(private_key_size);
+    let mut private_key = Vec::with_capacity(parameter_set.private_key_size());
 
     // Add rho, key, tr
     private_key.extend_from_slice(rho);
@@ -1281,7 +1172,7 @@ fn encode_private_key(
 
     // Encode t0
     for i in 0..k {
-        let encoded = encode_poly(&t0[i], t0_bits_per_coeff, t0_max_value)?;
+        let encoded = encode_poly_signed(&t0[i], t0_a, t0_b)?;
         private_key.extend_from_slice(&encoded);
     }
 
@@ -1309,13 +1200,6 @@ fn decode_public_key(
 
     // Check if we have enough bytes for the t1 polynomials
     if public_key_bytes.len() < 32 + k * bytes_per_poly {
-        #[cfg(test)]
-        eprintln!(
-            "Insufficient public key length: {} bytes, need at least {} bytes",
-            public_key_bytes.len(),
-            32 + k * bytes_per_poly
-        );
-
         return Err(Error::InvalidPublicKey);
     }
 
@@ -1370,9 +1254,10 @@ fn decode_private_key(
     let _s_bits_per_coeff = bitlen(2 * s_max_value);
     let s_bytes_per_poly = (256 * _s_bits_per_coeff).div_ceil(8);
 
-    let t0_max_value = (1 << d) - 1;
-    let t0_bits_per_coeff = bitlen(t0_max_value);
-    let t0_bytes_per_poly = (256 * t0_bits_per_coeff).div_ceil(8);
+    // t0 is packed as a signed value in [-(2^(d-1)-1), 2^(d-1)] using d bits.
+    let t0_a = (1usize << (d - 1)) - 1;
+    let t0_b = 1usize << (d - 1);
+    let t0_bytes_per_poly = (256 * d).div_ceil(8);
 
     // Check if private key has enough bytes
     let required_size = 128 + // rho + key + tr
@@ -1381,13 +1266,6 @@ fn decode_private_key(
                        (k * t0_bytes_per_poly); // t0
 
     if private_key_bytes.len() < required_size {
-        #[cfg(test)]
-        eprintln!(
-            "Invalid private key length: {} bytes, need {} bytes",
-            private_key_bytes.len(),
-            required_size
-        );
-
         return Err(Error::InvalidPrivateKey);
     }
 
@@ -1432,10 +1310,10 @@ fn decode_private_key(
             return Err(Error::InvalidPrivateKey);
         }
 
-        let poly = decode_poly(
+        let poly = decode_poly_signed(
             &private_key_bytes[offset..offset + t0_bytes_per_poly],
-            t0_bits_per_coeff,
-            t0_max_value,
+            t0_a,
+            t0_b,
         )?;
         t0.push(poly);
         offset += t0_bytes_per_poly;
@@ -1470,13 +1348,6 @@ fn decode_signature(
     let required_size = lambda / 4 + (l * z_bytes_per_poly) + omega + k;
 
     if signature_bytes.len() < required_size {
-        #[cfg(test)]
-        eprintln!(
-            "Invalid signature length: {} bytes, need {} bytes",
-            signature_bytes.len(),
-            required_size
-        );
-
         return Err(Error::InvalidSignature);
     }
 
@@ -1491,7 +1362,7 @@ fn decode_signature(
         let poly = decode_poly_signed(
             &signature_bytes[offset..offset + z_bytes_per_poly],
             gamma1 - 1,
-            gamma1 - 1,
+            gamma1,
         )?;
         z.push(poly);
         offset += z_bytes_per_poly;
@@ -1520,38 +1391,32 @@ fn decode_hint(bytes: &[u8], k: usize, omega: usize) -> Result<Vec<Polynomial>> 
         h.push(Polynomial::new());
     }
 
-    // Extract position bytes and count bytes
+    // Position bytes, then k cumulative-count bytes (FIPS 204 HintBitUnpack)
     let positions = &bytes[0..omega];
     let counts = &bytes[omega..omega + k];
 
-    // Validate that counts sum to at most omega
-    let total_count: usize = counts.iter().map(|&c| c as usize).sum();
-    if total_count > omega {
-        return Err(Error::InvalidSignature);
-    }
-
-    // Parse hints using counts to determine which positions go with which polynomial
-    let mut pos_idx = 0;
+    let mut index = 0usize;
     for i in 0..k {
-        let count = counts[i] as usize;
-        for _ in 0..count {
-            if pos_idx >= omega {
+        let end = counts[i] as usize;
+        // Cumulative counts must be non-decreasing and bounded by omega
+        if end < index || end > omega {
+            return Err(Error::InvalidSignature);
+        }
+
+        let first = index;
+        while index < end {
+            // Positions within a polynomial must be strictly increasing
+            if index > first && positions[index - 1] >= positions[index] {
                 return Err(Error::InvalidSignature);
             }
-
-            let pos = positions[pos_idx] as usize;
-            if pos >= 256 {
-                return Err(Error::InvalidSignature);
-            }
-
-            h[i].coeffs[pos] = 1;
-            pos_idx += 1;
+            h[i].coeffs[positions[index] as usize] = 1;
+            index += 1;
         }
     }
 
-    // Ensure remaining positions are 0
-    for i in pos_idx..omega {
-        if positions[i] != 0 {
+    // All remaining (unused) position bytes must be zero
+    for &p in &positions[index..omega] {
+        if p != 0 {
             return Err(Error::InvalidSignature);
         }
     }
@@ -1634,39 +1499,27 @@ fn decode_poly(bytes: &[u8], bits: usize, bound: u32) -> Result<Polynomial> {
     Ok(poly)
 }
 
-/// Encode a polynomial with coefficients in [-a, b]
+/// Encode a polynomial with coefficients in [-a, b] using FIPS 204 BitPack.
+///
+/// BitPack(w, a, b) stores (b - w_i) in bitlen(a+b) bits per coefficient.
 fn encode_poly_signed(poly: &Polynomial, a: usize, b: usize) -> Result<Vec<u8>> {
     let bits = bitlen((a + b) as u32);
     let mut bits_array = Vec::with_capacity(256 * bits);
 
-    // Track if we've shown warnings already to reduce output spam
-    let mut min_warning_shown = false;
-    let mut max_warning_shown = false;
-
     for i in 0..256 {
-        // Shift coefficient to the range [0, a+b]
-        let mut coeff = poly.coeffs[i] + (a as i32);
+        // FIPS 204 BitPack stores b - w_i, which lies in [0, a+b] for w in [-a, b].
+        let coeff = (b as i32) - poly.coeffs[i];
 
-        // Ensure coefficient is in valid range
-        if coeff < 0 {
-            coeff = 0;
-            // Log warning for coefficient adjustment (only once)
-            if !min_warning_shown {
-                eprintln!("Warning: Some coefficients were clamped to minimum value");
-                min_warning_shown = true;
-            }
-        } else if coeff > (a + b) as i32 {
-            coeff = (a + b) as i32;
-            // Log warning for coefficient adjustment (only once)
-            if !max_warning_shown {
-                eprintln!("Warning: Some coefficients were clamped to maximum value");
-                max_warning_shown = true;
-            }
+        if coeff < 0 || coeff > (a + b) as i32 {
+            return Err(Error::EncodingError(format!(
+                "Coefficient out of range for BitPack: {}",
+                poly.coeffs[i]
+            )));
         }
 
         let coeff_u32 = coeff as u32;
 
-        // Encode each bit of the coefficient
+        // Encode each bit of the coefficient (LSB first)
         for j in 0..bits {
             bits_array.push(((coeff_u32 >> j) & 1) as u8);
         }
@@ -1725,7 +1578,8 @@ fn decode_poly_signed(bytes: &[u8], a: usize, b: usize) -> Result<Polynomial> {
             )));
         }
 
-        poly.coeffs[i] = (coeff as i32) - (a as i32);
+        // FIPS 204 BitUnpack: w_i = b - (stored value)
+        poly.coeffs[i] = (b as i32) - (coeff as i32);
     }
 
     Ok(poly)
@@ -1741,40 +1595,15 @@ fn encode_signature(
     let (_k, l) = parameter_set.dimensions();
     let gamma1 = parameter_set.gamma1();
     let omega = parameter_set.omega();
-    #[cfg(test)]
-    let lambda = parameter_set.lambda();
 
-    // Calculate signature size
-    let z_bits_per_coeff = bitlen((2 * gamma1 - 2) as u32);
-    let _z_bytes_per_poly = (256 * z_bits_per_coeff).div_ceil(8);
-    #[cfg(test)]
-    let z_size = l * _z_bytes_per_poly;
-
-    // Calculate hint size
-    #[cfg(test)]
-    let h_size = omega + _k;
-
-    // Calculate the signature size
-    #[cfg(test)]
-    let calculated_size = lambda / 4 + z_size + h_size;
-
-    #[cfg(test)]
-    let sig_size = match parameter_set {
-        ParameterSet::TestSmall => calculated_size,
-        _ => parameter_set.signature_size(),
-    };
-
-    #[cfg(not(test))]
-    let sig_size = parameter_set.signature_size();
-
-    let mut signature = Vec::with_capacity(sig_size);
+    let mut signature = Vec::with_capacity(parameter_set.signature_size());
 
     // Add c_tilde
     signature.extend_from_slice(c_tilde);
 
     // Encode z
     for i in 0..l {
-        let encoded = encode_poly_signed(&z[i], gamma1 - 1, gamma1 - 1)?;
+        let encoded = encode_poly_signed(&z[i], gamma1 - 1, gamma1)?;
         signature.extend_from_slice(&encoded);
     }
 
@@ -1792,4 +1621,43 @@ fn bitlen(n: u32) -> usize {
     }
 
     (32 - n.leading_zeros()) as usize
+}
+
+#[cfg(test)]
+mod sib_tests {
+    use super::*;
+    use sha3::digest::{ExtendableOutput, Update, XofReader};
+
+    // Inline FIPS 204 Algorithm 29 reference for cross-checking.
+    fn ref_sample_in_ball(seed: &[u8], tau: usize) -> [i32; 256] {
+        let mut c = [0i32; 256];
+        let mut x = sha3::Shake256::default();
+        x.update(seed);
+        let mut r = x.finalize_xof();
+        let mut s8 = [0u8; 8];
+        r.read(&mut s8);
+        let signs = u64::from_le_bytes(s8);
+        for (si, i) in ((256 - tau)..256).enumerate() {
+            let j = loop {
+                let mut b = [0u8; 1];
+                r.read(&mut b);
+                if (b[0] as usize) <= i {
+                    break b[0] as usize;
+                }
+            };
+            c[i] = c[j];
+            c[j] = if (signs >> si) & 1 == 1 { -1 } else { 1 };
+        }
+        c
+    }
+
+    #[test]
+    fn sample_in_ball_matches_fips() {
+        for (seed_byte, tau) in [(1u8, 39usize), (2, 49), (3, 60), (200, 39)] {
+            let seed = [seed_byte; 32];
+            let got = sample_in_ball(&seed, tau).unwrap();
+            let expected = ref_sample_in_ball(&seed, tau);
+            assert_eq!(got.coeffs, expected, "mismatch for tau={tau}");
+        }
+    }
 }

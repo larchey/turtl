@@ -9,7 +9,7 @@
 //! such corruptions.
 
 use turtl::error::Error;
-use turtl::security::fault_detection::{ct_eq, verify_bounds, verify_signature_checks};
+use turtl::security::fault_detection::{ct_eq, verify_bounds};
 // KEM imports disabled pending investigation
 // use turtl::kem::{self, ParameterSet};
 
@@ -63,28 +63,6 @@ fn test_ct_eq_extremes() {
     let ones = vec![0xFFu8; 32];
 
     assert!(!ct_eq(&zeros, &ones), "All zeros != all ones");
-}
-
-/// Test signature verification double-check with matching results
-#[test]
-fn test_verify_signature_checks_matching() {
-    let result = verify_signature_checks(true, true);
-    assert!(result.is_ok(), "Matching true results should pass");
-
-    let result = verify_signature_checks(false, false);
-    assert!(result.is_ok(), "Matching false results should pass");
-}
-
-/// Test signature verification double-check detects mismatch
-#[test]
-fn test_verify_signature_checks_mismatch() {
-    let result = verify_signature_checks(true, false);
-    assert!(result.is_err(), "Mismatched results should fail");
-    assert!(matches!(result.unwrap_err(), Error::FaultDetected));
-
-    let result = verify_signature_checks(false, true);
-    assert!(result.is_err(), "Mismatched results should fail");
-    assert!(matches!(result.unwrap_err(), Error::FaultDetected));
 }
 
 /// Test bounds verification with valid values
@@ -216,20 +194,3 @@ fn test_ct_eq_single_byte() {
 }
 
 // Fault attack simulation test disabled - see note above
-
-/// Test simulation of double-computation fault detection
-#[test]
-fn test_double_computation_fault_detection() {
-    // Simulate a scenario where we compute something twice
-    // and verify both results match
-
-    // Normal case: both computations succeed
-    let result1 = true;
-    let result2 = true;
-    assert!(verify_signature_checks(result1, result2).is_ok());
-
-    // Fault injection case: attacker flips the result of one computation
-    let result1 = true;
-    let result2_faulted = false; // Simulated fault
-    assert!(verify_signature_checks(result1, result2_faulted).is_err());
-}

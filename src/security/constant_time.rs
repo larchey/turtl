@@ -20,7 +20,7 @@
 #[inline]
 pub fn ct_cmov(r: &mut u32, x: u32, cond: bool) {
     // Convert bool to a mask (0x00000000 or 0xffffffff)
-    let mask = if cond { 0xffffffff } else { 0 };
+    let mask = (cond as u32).wrapping_neg();
 
     // Use bitwise operations to perform conditional move in constant time
     *r = (*r & !mask) | (x & mask);
@@ -39,7 +39,7 @@ pub fn ct_cmov(r: &mut u32, x: u32, cond: bool) {
 #[inline]
 pub fn ct_cmov_u64(r: &mut u64, x: u64, cond: bool) {
     // Convert bool to a mask (0x0000000000000000 or 0xffffffffffffffff)
-    let mask = if cond { 0xffffffffffffffff } else { 0 };
+    let mask = (cond as u64).wrapping_neg();
 
     // Use bitwise operations to perform conditional move in constant time
     *r = (*r & !mask) | (x & mask);
@@ -58,7 +58,7 @@ pub fn ct_cmov_u64(r: &mut u64, x: u64, cond: bool) {
 #[inline]
 pub fn ct_cmov_u128(r: &mut u128, x: u128, cond: bool) {
     // Convert bool to a mask
-    let mask = if cond { u128::MAX } else { 0 };
+    let mask = (cond as u128).wrapping_neg();
 
     // Use bitwise operations to perform conditional move in constant time
     *r = (*r & !mask) | (x & mask);
@@ -77,7 +77,7 @@ pub fn ct_cmov_u128(r: &mut u128, x: u128, cond: bool) {
 #[inline]
 pub fn ct_cmov_byte(r: &mut u8, x: u8, cond: bool) {
     // Convert bool to a mask (0x00 or 0xff)
-    let mask = if cond { 0xff } else { 0 };
+    let mask = (cond as u8).wrapping_neg();
 
     // Use bitwise operations to perform conditional move in constant time
     *r = (*r & !mask) | (x & mask);
@@ -96,7 +96,7 @@ pub fn ct_cmov_byte(r: &mut u8, x: u8, cond: bool) {
 #[inline]
 pub fn ct_cswap(a: &mut u32, b: &mut u32, cond: bool) {
     // Convert bool to a mask (0x00000000 or 0xffffffff)
-    let mask = if cond { 0xffffffff } else { 0 };
+    let mask = (cond as u32).wrapping_neg();
 
     // Use bitwise operations to perform conditional swap in constant time
     let t = mask & (*a ^ *b);
@@ -117,7 +117,7 @@ pub fn ct_cswap(a: &mut u32, b: &mut u32, cond: bool) {
 #[inline]
 pub fn ct_cswap_u64(a: &mut u64, b: &mut u64, cond: bool) {
     // Convert bool to a mask (0x0000000000000000 or 0xffffffffffffffff)
-    let mask = if cond { 0xffffffffffffffff } else { 0 };
+    let mask = (cond as u64).wrapping_neg();
 
     // Use bitwise operations to perform conditional swap in constant time
     let t = mask & (*a ^ *b);
@@ -138,7 +138,7 @@ pub fn ct_cswap_u64(a: &mut u64, b: &mut u64, cond: bool) {
 #[inline]
 pub fn ct_cswap_u128(a: &mut u128, b: &mut u128, cond: bool) {
     // Convert bool to a mask
-    let mask = if cond { u128::MAX } else { 0 };
+    let mask = (cond as u128).wrapping_neg();
 
     // Use bitwise operations to perform conditional swap in constant time
     let t = mask & (*a ^ *b);
@@ -159,7 +159,7 @@ pub fn ct_cswap_u128(a: &mut u128, b: &mut u128, cond: bool) {
 #[inline]
 pub fn ct_cswap_byte(a: &mut u8, b: &mut u8, cond: bool) {
     // Convert bool to a mask (0x00 or 0xff)
-    let mask = if cond { 0xff } else { 0 };
+    let mask = (cond as u8).wrapping_neg();
 
     // Use bitwise operations to perform conditional swap in constant time
     let t = mask & (*a ^ *b);
@@ -186,7 +186,7 @@ pub fn ct_cswap_slice(a: &mut [u8], b: &mut [u8], cond: bool) {
     assert_eq!(a.len(), b.len(), "Slices must have the same length");
 
     // Convert bool to a mask (0x00 or 0xff)
-    let mask = if cond { 0xff } else { 0 };
+    let mask = (cond as u8).wrapping_neg();
 
     // Perform conditional swap on each byte
     for (x, y) in a.iter_mut().zip(b.iter_mut()) {
@@ -213,7 +213,7 @@ pub fn ct_cswap_slice(a: &mut [u8], b: &mut [u8], cond: bool) {
 #[inline]
 pub fn ct_select(x: u32, y: u32, cond: bool) -> u32 {
     // Convert bool to a mask (0x00000000 or 0xffffffff)
-    let mask = if cond { 0xffffffff } else { 0 };
+    let mask = (cond as u32).wrapping_neg();
 
     // Use bitwise operations to perform selection in constant time
     (x & mask) | (y & !mask)
@@ -236,7 +236,7 @@ pub fn ct_select(x: u32, y: u32, cond: bool) -> u32 {
 #[inline]
 pub fn ct_select_u64(x: u64, y: u64, cond: bool) -> u64 {
     // Convert bool to a mask (0x0000000000000000 or 0xffffffffffffffff)
-    let mask = if cond { 0xffffffffffffffff } else { 0 };
+    let mask = (cond as u64).wrapping_neg();
 
     // Use bitwise operations to perform selection in constant time
     (x & mask) | (y & !mask)
@@ -259,7 +259,7 @@ pub fn ct_select_u64(x: u64, y: u64, cond: bool) -> u64 {
 #[inline]
 pub fn ct_select_u128(x: u128, y: u128, cond: bool) -> u128 {
     // Convert bool to a mask
-    let mask = if cond { u128::MAX } else { 0 };
+    let mask = (cond as u128).wrapping_neg();
 
     // Use bitwise operations to perform selection in constant time
     (x & mask) | (y & !mask)
@@ -282,7 +282,7 @@ pub fn ct_select_u128(x: u128, y: u128, cond: bool) -> u128 {
 #[inline]
 pub fn ct_select_byte(x: u8, y: u8, cond: bool) -> u8 {
     // Convert bool to a mask (0x00 or 0xff)
-    let mask = if cond { 0xff } else { 0 };
+    let mask = (cond as u8).wrapping_neg();
 
     // Use bitwise operations to perform selection in constant time
     (x & mask) | (y & !mask)

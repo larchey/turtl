@@ -16,7 +16,7 @@ use super::aux;
 /// Returns (A, s, e) where all are in normal (non-NTT) domain.
 pub(crate) fn generate_key_components(
     rho: &[u8; 32],
-    sigma: &[u8; 64],
+    sigma: &[u8; 32],
     parameter_set: ParameterSet,
 ) -> Result<(Vec<Vec<Polynomial>>, Vec<Polynomial>, Vec<Polynomial>)> {
     let k = parameter_set.k();
@@ -67,49 +67,56 @@ pub(crate) fn generate_key_components(
     Ok((matrix_a, s, e))
 }
 
-/// Compute the public value t = A·s + e (FIPS 203 Algorithm 12, step 7)
+/// Compute the public value t-hat = A-hat·s-hat + e-hat (FIPS 203 Algorithm 13).
+///
+/// Per FIPS 203, the public key stores t-hat in the NTT domain, so this returns
+/// t-hat (NTT domain) alongside s-hat (NTT domain), which the private key stores.
+/// Matrix A is already in the NTT domain.
 pub(crate) fn compute_public_t(
     matrix_a: &[Vec<Polynomial>],
     s: &[Polynomial],
     e: &[Polynomial],
-) -> Result<Vec<Polynomial>> {
+) -> Result<(Vec<Polynomial>, Vec<Polynomial>)> {
     let k = matrix_a.len();
     let ntt_ctx = NTTContext::new(NTTType::MLKEM);
 
-    // NTT transform s
-    let mut s_ntt = Vec::with_capacity(k);
+    // NTT transform s and e (FIPS 203 keeps both in the NTT domain)
+    let mut s_hat = Vec::with_capacity(k);
+    let mut e_hat = Vec::with_capacity(k);
     for i in 0..k {
         let mut s_i = s[i].clone();
         ntt_ctx.forward(&mut s_i)?;
-        s_ntt.push(s_i);
+        s_hat.push(s_i);
+
+        let mut e_i = e[i].clone();
+        ntt_ctx.forward(&mut e_i)?;
+        e_hat.push(e_i);
     }
 
-    // Compute t = A·s + e
-    let mut t = Vec::with_capacity(k);
+    // Compute t-hat = A-hat·s-hat + e-hat, staying in the NTT domain
+    let mut t_hat = Vec::with_capacity(k);
     for i in 0..k {
         let mut t_i = Polynomial::new();
 
-        // Compute the i-th row of A times s
+        // Compute the i-th row of A-hat times s-hat
         for j in 0..k {
-            let prod = ntt_ctx.multiply_ntt(&matrix_a[i][j], &s_ntt[j])?;
+            let prod = ntt_ctx.multiply_ntt(&matrix_a[i][j], &s_hat[j])?;
             t_i.add_assign(&prod, ntt_ctx.modulus);
         }
 
-        // Transform back to normal domain
-        ntt_ctx.inverse(&mut t_i)?;
+        // Add e-hat[i] (no inverse NTT: t-hat stays in NTT domain)
+        t_i.add_assign(&e_hat[i], ntt_ctx.modulus);
 
-        // Add e[i]
-        t_i.add_assign(&e[i], ntt_ctx.modulus);
-
-        t.push(t_i);
+        t_hat.push(t_i);
     }
 
-    Ok(t)
+    Ok((t_hat, s_hat))
 }
 
-/// Encode the public key (FIPS 203 Algorithm 12, step 8)
+/// Encode the public key (FIPS 203 Algorithm 13, step 8)
 ///
-/// Public key format: ek_pke = ρ || ByteEncode_12(t[0]) || ... || ByteEncode_12(t[k-1])
+/// Public key format: ek_pke = ByteEncode_12(t-hat[0]) || ... || ByteEncode_12(t-hat[k-1]) || ρ
+/// Note FIPS 203 places ρ *after* the encoded t-hat.
 pub(crate) fn encode_public_key(
     rho: &[u8; 32],
     t: &[Polynomial],
@@ -117,19 +124,19 @@ pub(crate) fn encode_public_key(
 ) -> Result<Vec<u8>> {
     let k = t.len();
 
-    // Public key size: 32 bytes (ρ) + k * 32 * 12 bits / 8 = 32 + k * 384 bytes
-    let pk_size = 32 + k * 384;
+    // Public key size: k * 32 * 12 bits / 8 + 32 bytes (ρ) = k * 384 + 32 bytes
+    let pk_size = k * 384 + 32;
     let mut public_key = Vec::with_capacity(pk_size);
 
-    // Add ρ
-    public_key.extend_from_slice(rho);
-
-    // Add ByteEncode_12(t) for each polynomial
+    // Add ByteEncode_12(t-hat) for each polynomial
     // FIPS 203: ByteEncode_d encodes coefficients with d bits each
     for i in 0..k {
         let encoded = byte_encode_12(&t[i])?;
         public_key.extend(encoded);
     }
+
+    // Add ρ (appended last, per FIPS 203)
+    public_key.extend_from_slice(rho);
 
     Ok(public_key)
 }
@@ -160,26 +167,25 @@ pub(crate) fn decode_public_key(
 ) -> Result<(Vec<Polynomial>, [u8; 32])> {
     let k = parameter_set.k();
 
-    if public_key.len() != 32 + k * 384 {
+    if public_key.len() != k * 384 + 32 {
         return Err(Error::EncodingError(format!(
             "Invalid public key length: expected {}, got {}",
-            32 + k * 384,
+            k * 384 + 32,
             public_key.len()
         )));
     }
 
-    // Extract ρ
-    let mut rho = [0u8; 32];
-    rho.copy_from_slice(&public_key[0..32]);
-
-    // Extract t (decode each polynomial)
+    // Extract t-hat (decode each polynomial), then ρ which is appended last
     let mut t = Vec::with_capacity(k);
     for i in 0..k {
-        let start = 32 + i * 384;
+        let start = i * 384;
         let end = start + 384;
         let t_i = byte_decode_12(&public_key[start..end])?;
         t.push(t_i);
     }
+
+    let mut rho = [0u8; 32];
+    rho.copy_from_slice(&public_key[k * 384..k * 384 + 32]);
 
     Ok((t, rho))
 }
@@ -252,20 +258,12 @@ pub(crate) fn encrypt(
     // Initialize counter
     let mut counter = 0u8;
 
-    // Decode the public key
-    let (t, rho) = decode_public_key(public_key, parameter_set)?;
+    // Decode the public key: t-hat is already in the NTT domain (FIPS 203)
+    let (t_ntt, rho) = decode_public_key(public_key, parameter_set)?;
 
     // Generate matrix A (in NTT domain)
     let ntt_ctx = NTTContext::new(NTTType::MLKEM);
     let matrix_a = expand_a(&rho, k)?;
-
-    // Transform t to NTT domain
-    let mut t_ntt = Vec::with_capacity(k);
-    for i in 0..k {
-        let mut t_i = t[i].clone();
-        ntt_ctx.forward(&mut t_i)?;
-        t_ntt.push(t_i);
-    }
 
     // Sample vector r from CBD_η1
     let mut r = Vec::with_capacity(k);
@@ -376,8 +374,8 @@ pub(crate) fn decrypt(
     let u = decompress_vector(&byte_decode_vector(c1, (1 << du) - 1)?, du)?;
     let v = decompress(&byte_decode(c2, (1 << dv) - 1)?, dv)?;
 
-    // Decode private key to get s
-    let s = decode_s_from_dk_pke(private_key, k)?;
+    // Decode private key to get s-hat (already in the NTT domain, FIPS 203)
+    let s_ntt = decode_s_from_dk_pke(private_key, k)?;
 
     // Compute w = v - s^T·u
     let ntt_ctx = NTTContext::new(NTTType::MLKEM);
@@ -391,15 +389,7 @@ pub(crate) fn decrypt(
         u_ntt.push(u_i);
     }
 
-    // Transform s to NTT domain
-    let mut s_ntt = Vec::with_capacity(k);
-    for i in 0..k {
-        let mut s_i = s[i].clone();
-        ntt_ctx.forward(&mut s_i)?;
-        s_ntt.push(s_i);
-    }
-
-    // Compute s^T·u
+    // Compute s-hat^T·u-hat
     for i in 0..k {
         let mut prod = ntt_ctx.multiply_ntt(&s_ntt[i], &u_ntt[i])?;
         ntt_ctx.inverse(&mut prod)?;
@@ -429,7 +419,16 @@ fn reject_sample_ntt(seed: &[u8], _ntt_ctx: &NTTContext) -> Result<Polynomial> {
     hasher.update(seed);
     let mut reader = hasher.finalize_xof();
 
+    // Generous cap so an adversarial/degenerate seed cannot hang the process.
+    // ~128 accepting iterations are expected; exhausting this bound is
+    // cryptographically implausible for a well-formed XOF.
+    let mut iterations = 0;
     while j < 256 {
+        if iterations >= 10_000 {
+            return Err(Error::RandomnessError);
+        }
+        iterations += 1;
+
         let mut buf = [0u8; 3];
         reader.read(&mut buf);
 

@@ -6,15 +6,18 @@
 //!
 //! ## Features
 //!
-//! * Complete implementation of ML-KEM with all parameter sets (512, 768, 1024)
-//! * Complete implementation of ML-DSA with all parameter sets (44, 65, 87)
-//! * High-performance NTT implementation
-//! * Enhanced side-channel resistance with constant-time operations
-//! * Fault attack countermeasures for hardened security
-//! * Safe memory handling with automatic zeroization for sensitive data
+//! * ML-KEM with all parameter sets (512, 768, 1024)
+//! * ML-DSA with all parameter sets (44, 65, 87)
+//! * FIPS 203/204 conformance is cross-checked against reference implementations:
+//!   interoperability and byte-for-byte keygen KATs pass for every parameter set
+//! * Private keys and shared secrets zeroize their buffers on drop
 //! * Simple, developer-friendly API
-//! * Comprehensive security validation and testing
-//! * No unsafe code - 100% safe Rust
+//! * No `unsafe` code
+//!
+//! ## Status
+//!
+//! This crate is **not** yet hardened against timing/power side-channels and has not had an
+//! independent audit. See `SECURITY_REVIEW_2026-07.md`. Not yet suitable for production use.
 //!
 //! ## Examples
 //!

@@ -514,22 +514,36 @@ impl NTTContext {
     pub fn multiply_ntt(&self, a: &Polynomial, b: &Polynomial) -> Result<Polynomial> {
         let mut result = Polynomial::new();
 
-        for i in 0..256 {
-            match self.ntt_type {
-                NTTType::MLKEM => {
-                    // For ML-KEM, simple coefficient-wise multiplication modulo q
-                    // Use i64 for the multiplication to avoid overflow
-                    let a_val = a.coeffs[i];
-                    let b_val = b.coeffs[i];
+        match self.ntt_type {
+            NTTType::MLKEM => {
+                // ML-KEM's NTT is a *partial* transform: x^256+1 splits into 128
+                // degree-2 factors (x^2 - zeta^(2·bitrev7(i)+1)). Multiplication is
+                // therefore BaseCaseMultiply over 128 coefficient pairs, NOT pointwise.
+                // FIPS 203 Algorithm 12.
+                let q = self.modulus as i64;
+                for i in 0..128 {
+                    // gamma_i = zeta^(2·bitrev7(i)+1) = (zetas[i]^2 · 17) mod q,
+                    // since zetas[i] = 17^bitrev7(i).
+                    let z = self.zetas[i] as i64;
+                    let gamma = (z * z % q) * 17 % q;
 
-                    // Perform modular multiplication (a * b mod q)
-                    let prod = ((a_val as i64 * b_val as i64) % (self.modulus as i64)) as i32;
+                    let a0 = a.coeffs[2 * i] as i64;
+                    let a1 = a.coeffs[2 * i + 1] as i64;
+                    let b0 = b.coeffs[2 * i] as i64;
+                    let b1 = b.coeffs[2 * i + 1] as i64;
 
-                    // Ensure the result is in the range [0, q-1]
-                    result.coeffs[i] = if prod < 0 { prod + self.modulus } else { prod };
+                    // c0 = a0·b0 + a1·b1·gamma ; c1 = a0·b1 + a1·b0
+                    let c0 = (a0 * b0 % q + (a1 * b1 % q) * gamma % q).rem_euclid(q);
+                    let c1 = (a0 * b1 % q + a1 * b0 % q).rem_euclid(q);
+
+                    result.coeffs[2 * i] = c0 as i32;
+                    result.coeffs[2 * i + 1] = c1 as i32;
                 }
-                NTTType::MLDSA => {
-                    // Use direct modulo (matching forward/inverse implementation)
+            }
+            NTTType::MLDSA => {
+                // ML-DSA's NTT is a full transform (x^256+1 splits into linears),
+                // so NTT-domain multiplication is coefficient-wise.
+                for i in 0..256 {
                     let prod =
                         ((a.coeffs[i] as i64 * b.coeffs[i] as i64) % self.modulus as i64) as i32;
                     result.coeffs[i] = prod;
