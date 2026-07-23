@@ -125,15 +125,15 @@ pub(crate) fn ml_dsa_sign_internal(
     rho_data.extend_from_slice(&mu);
     let rho_prime = hash::h_function(&rho_data, 64);
 
-    // Initialize counter
+    // FIPS 204: kappa is the ExpandMask nonce base, incremented by l each
+    // rejection iteration. A separate counter bounds the loop.
     let mut kappa = 0u16;
+    const MAX_ATTEMPTS: u32 = 1000;
+    let mut attempts = 0u32;
 
-    // Set a maximum number of attempts to prevent infinite loops
-    const MAX_ATTEMPTS: u16 = 1000;
-
-    // Loop until a valid signature is found or max attempts reached
-    while kappa < MAX_ATTEMPTS {
-        // Generate y (in centered representation [-gamma1+1, gamma1-1])
+    while attempts < MAX_ATTEMPTS {
+        attempts += 1;
+        // Generate y (in centered representation)
         let y = expand_mask(&rho_prime, kappa, l, gamma1)?;
 
         // For w = Ay, we need y in [0, q-1] representation for NTT
@@ -205,7 +205,7 @@ pub(crate) fn ml_dsa_sign_internal(
         }
 
         if !z_ok {
-            kappa += 1;
+            kappa += l as u16;
             continue;
         }
 
@@ -235,7 +235,7 @@ pub(crate) fn ml_dsa_sign_internal(
         }
 
         if !r0_ok {
-            kappa += 1;
+            kappa += l as u16;
             continue;
         }
 
@@ -265,7 +265,7 @@ pub(crate) fn ml_dsa_sign_internal(
 
         // Check if number of 1's is within limit
         if ones_count > omega {
-            kappa += 1;
+            kappa += l as u16;
             continue;
         }
 
@@ -782,57 +782,35 @@ fn sample_in_ball(seed: &[u8], tau: usize) -> Result<Polynomial> {
 fn expand_mask(rho_prime: &[u8], kappa: u16, l: usize, gamma1: usize) -> Result<Vec<Polynomial>> {
     let mut y = Vec::with_capacity(l);
 
-    for i in 0..l {
-        let seed = [rho_prime, &kappa.to_le_bytes(), &(i as u16).to_le_bytes()].concat();
-        let y_i = sample_uniform_poly(&seed, gamma1)?;
-        y.push(y_i);
+    // FIPS 204 ExpandMask: y[r] uses the 2-byte little-endian nonce (kappa + r).
+    for r in 0..l {
+        let nonce = kappa + r as u16;
+        let seed = [rho_prime, &nonce.to_le_bytes()].concat();
+        y.push(sample_uniform_poly(&seed, gamma1)?);
     }
 
     Ok(y)
 }
 
-/// Sample a polynomial with coefficients in [-gamma1+1, gamma1-1]
+/// Sample a mask polynomial with coefficients in [-(gamma1-1), gamma1]
+/// (FIPS 204 ExpandMask inner BitUnpack): each coefficient is gamma1 minus a
+/// c-bit little-endian value, where c = bitlen(2*gamma1 - 1).
 fn sample_uniform_poly(seed: &[u8], gamma1: usize) -> Result<Polynomial> {
     let mut poly = Polynomial::new();
 
+    let c = bitlen((2 * gamma1 - 1) as u32);
+
     let mut ctx = hash::SHAKE256Context::init();
     ctx.absorb(seed);
-
-    // Calculate how many bits needed per coefficient
-    let bits_needed = bitlen((2 * gamma1 - 2) as u32);
-    let bytes_per_coeff = bits_needed.div_ceil(8);
+    let v = ctx.squeeze(32 * c); // 256 coefficients * c bits / 8
+    let bits = bytes_to_bits(&v);
 
     for i in 0..256 {
-        let mut valid_coeff = false;
-        let mut iterations = 0;
-
-        while !valid_coeff {
-            if iterations >= 10_000 {
-                return Err(Error::RandomnessError);
-            }
-            iterations += 1;
-
-            let bytes = ctx.squeeze(bytes_per_coeff);
-
-            // Convert bytes to an integer (little-endian)
-            let mut val = 0i32;
-            for j in 0..bytes_per_coeff {
-                val |= (bytes[j] as i32) << (8 * j);
-            }
-
-            // Mask out unused bits
-            let mask = (1 << bits_needed) - 1;
-            let val_masked = val & mask;
-
-            // Map to range [-gamma1+1, gamma1-1]
-            let shifted = val_masked - (gamma1 as i32 - 1);
-
-            // Accept if in range
-            if shifted >= -(gamma1 as i32 - 1) && shifted <= (gamma1 as i32 - 1) {
-                poly.coeffs[i] = shifted;
-                valid_coeff = true;
-            }
+        let mut value = 0i32;
+        for j in 0..c {
+            value |= (bits[i * c + j] as i32) << j;
         }
+        poly.coeffs[i] = gamma1 as i32 - value;
     }
 
     Ok(poly)
