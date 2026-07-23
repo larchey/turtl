@@ -132,11 +132,18 @@ pub(crate) fn encapsulate_internal(public_key: &PublicKey) -> Result<(Ciphertext
     let mut m = [0u8; 32];
     OsRng.fill_bytes(&mut m);
 
-    // Call the internal encapsulation function
-    let (ciphertext_bytes, shared_secret_bytes) =
-        ml_kem_encaps_internal(public_key.as_bytes(), &m, public_key.parameter_set())?;
+    encapsulate_deterministic_internal(public_key, &m)
+}
 
-    // Create ciphertext and shared secret objects
+/// Encapsulate with a caller-supplied 32-byte message m (FIPS 203
+/// ML-KEM.Encaps_internal). Deterministic; used for KAT reproduction.
+pub(crate) fn encapsulate_deterministic_internal(
+    public_key: &PublicKey,
+    m: &[u8; 32],
+) -> Result<(Ciphertext, SharedSecret)> {
+    let (ciphertext_bytes, shared_secret_bytes) =
+        ml_kem_encaps_internal(public_key.as_bytes(), m, public_key.parameter_set())?;
+
     let ciphertext = Ciphertext::new(ciphertext_bytes, public_key.parameter_set())?;
     let shared_secret = SharedSecret::new(shared_secret_bytes);
 
