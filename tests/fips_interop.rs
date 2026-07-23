@@ -75,3 +75,92 @@ macro_rules! dsa_interop {
 dsa_interop!(dsa_44, fips204::ml_dsa_44, dsa::ParameterSet::MlDsa44, 1312, 2420);
 dsa_interop!(dsa_65, fips204::ml_dsa_65, dsa::ParameterSet::MlDsa65, 1952, 3309);
 dsa_interop!(dsa_87, fips204::ml_dsa_87, dsa::ParameterSet::MlDsa87, 2592, 4627);
+
+// ---------------------------------------------------------------------------
+// Beyond one-shot conformance: robustness and properties that the per-set
+// interop macros above do not cover.
+// ---------------------------------------------------------------------------
+
+/// ML-KEM implicit rejection: decapsulating a tampered ciphertext must succeed
+/// (no error), return a shared secret that differs from the sender's, and be
+/// deterministic (same tampered input -> same output).
+#[test]
+fn kem_implicit_rejection() {
+    for p in [
+        kem::ParameterSet::MlKem512,
+        kem::ParameterSet::MlKem768,
+        kem::ParameterSet::MlKem1024,
+    ] {
+        let (pk, sk) = kem::key_gen(p).unwrap();
+        let (ct, sender_ss) = kem::encapsulate(&pk).unwrap();
+
+        let mut bad = ct.as_bytes().to_vec();
+        bad[0] ^= 0xFF;
+        let bad_ct = kem::Ciphertext::new(bad, p).unwrap();
+
+        let ss1 = kem::decapsulate(&sk, &bad_ct).expect("implicit rejection must not error");
+        let ss2 = kem::decapsulate(&sk, &bad_ct).expect("implicit rejection must not error");
+
+        assert_ne!(
+            ss1.as_bytes(),
+            sender_ss.as_bytes(),
+            "tampered ciphertext must not recover the sender's secret"
+        );
+        assert_eq!(
+            ss1.as_bytes(),
+            ss2.as_bytes(),
+            "implicit rejection must be deterministic"
+        );
+    }
+}
+
+/// Many independent key/sign/verify and encaps/decaps cycles, to catch
+/// probabilistic bugs (e.g. in the ML-DSA rejection-sampling loop) that a
+/// single run can miss.
+#[test]
+fn many_iteration_roundtrips() {
+    for _ in 0..64 {
+        let (pk, sk) = kem::key_gen(kem::ParameterSet::MlKem768).unwrap();
+        let (ct, ss1) = kem::encapsulate(&pk).unwrap();
+        let ss2 = kem::decapsulate(&sk, &ct).unwrap();
+        assert_eq!(ss1.as_bytes(), ss2.as_bytes());
+
+        let (dpk, dsk) = dsa::key_gen(dsa::ParameterSet::MlDsa65).unwrap();
+        let msg = b"iteration message";
+        let sig = dsa::sign(&dsk, msg, b"ctx", SigningMode::Hedged).unwrap();
+        assert!(dsa::verify(&dpk, msg, &sig, b"ctx").unwrap());
+        assert!(!dsa::verify(&dpk, b"other", &sig, b"ctx").unwrap());
+    }
+}
+
+/// Pre-hash signing (HashML-DSA) interoperates with the reference on the
+/// shared SHAKE128 pre-hash, in both directions.
+#[test]
+fn dsa_prehash_interop_shake128() {
+    use fips204::ml_dsa_44;
+    use fips204::traits::{KeyGen as _, SerDes as _, Signer as _, Verifier as _};
+    use fips204::Ph;
+    use turtl::dsa::HashFunction;
+
+    let msg = b"prehash interop message";
+
+    // turtl signs (pre-hash) -> reference verifies
+    let (pk, sk) = dsa::key_gen(dsa::ParameterSet::MlDsa44).unwrap();
+    let sig = dsa::hash_sign(&sk, msg, b"", HashFunction::SHAKE128, SigningMode::Deterministic).unwrap();
+    let ref_pk = ml_dsa_44::PublicKey::try_from_bytes(pk.as_bytes().try_into().unwrap()).unwrap();
+    let sig_arr: [u8; 2420] = sig.as_bytes().try_into().unwrap();
+    assert!(
+        ref_pk.hash_verify(msg, &sig_arr, b"", &Ph::SHAKE128),
+        "reference must verify turtl's pre-hash signature"
+    );
+
+    // reference signs (pre-hash) -> turtl verifies
+    let (rpk, rsk) = ml_dsa_44::try_keygen().unwrap();
+    let rsig = rsk.try_hash_sign(msg, b"", &Ph::SHAKE128).unwrap();
+    let turtl_pk = dsa::PublicKey::new(rpk.into_bytes().to_vec(), dsa::ParameterSet::MlDsa44).unwrap();
+    let turtl_sig = dsa::Signature::new(rsig.to_vec(), dsa::ParameterSet::MlDsa44).unwrap();
+    assert!(
+        dsa::hash_verify(&turtl_pk, msg, &turtl_sig, b"", HashFunction::SHAKE128).unwrap(),
+        "turtl must verify the reference's pre-hash signature"
+    );
+}
