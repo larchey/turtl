@@ -636,6 +636,16 @@ pub fn encapsulate(public_key: &PublicKey) -> Result<(Ciphertext, SharedSecret)>
     encapsulate::encapsulate(public_key)
 }
 
+/// Encapsulate using a caller-supplied 32-byte message `m` instead of fresh
+/// randomness. This is the deterministic, KAT-reproducible entry point
+/// (FIPS 203 ML-KEM.Encaps_internal); for normal use call [`encapsulate`].
+pub fn encapsulate_deterministic(
+    public_key: &PublicKey,
+    message: &[u8; 32],
+) -> Result<(Ciphertext, SharedSecret)> {
+    internal::encapsulate_deterministic_internal(public_key, message)
+}
+
 /// Decapsulate a shared secret using a private key and ciphertext.
 ///
 /// This function recovers the shared secret that was encapsulated in the ciphertext
