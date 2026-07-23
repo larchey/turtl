@@ -587,9 +587,8 @@ fn reject_sample_ntt(seed: &[u8], ntt_ctx: &NTTContext) -> Result<Polynomial> {
         let bytes = ctx.squeeze(3);
 
         // CoeffFromThreeBytes: 23-bit little-endian value (top bit of b2 cleared)
-        let coeff = (bytes[0] as u32)
-            | ((bytes[1] as u32) << 8)
-            | (((bytes[2] as u32) & 0x7F) << 16);
+        let coeff =
+            (bytes[0] as u32) | ((bytes[1] as u32) << 8) | (((bytes[2] as u32) & 0x7F) << 16);
 
         // Reject values that are not in [0, q-1]
         if (coeff as i32) < ntt_ctx.modulus {
@@ -763,8 +762,7 @@ fn sample_in_ball(seed: &[u8], tau: usize) -> Result<Polynomial> {
     let sign_bytes = ctx.squeeze(8);
     let signs = u64::from_le_bytes(sign_bytes.as_slice().try_into().unwrap());
 
-    let mut sign_idx = 0u32;
-    for i in (256 - tau)..256 {
+    for (sign_idx, i) in ((256 - tau)..256).enumerate() {
         // Rejection-sample j in [0, i] one byte at a time.
         let j = loop {
             let b = ctx.squeeze(1)[0] as usize;
@@ -775,7 +773,6 @@ fn sample_in_ball(seed: &[u8], tau: usize) -> Result<Polynomial> {
 
         poly.coeffs[i] = poly.coeffs[j];
         poly.coeffs[j] = if (signs >> sign_idx) & 1 == 1 { -1 } else { 1 };
-        sign_idx += 1;
     }
 
     Ok(poly)
@@ -1617,6 +1614,15 @@ fn encode_signature(
     Ok(signature)
 }
 
+/// Calculate bit length of an integer
+fn bitlen(n: u32) -> usize {
+    if n == 0 {
+        return 0;
+    }
+
+    (32 - n.leading_zeros()) as usize
+}
+
 #[cfg(test)]
 mod sib_tests {
     use super::*;
@@ -1631,8 +1637,7 @@ mod sib_tests {
         let mut s8 = [0u8; 8];
         r.read(&mut s8);
         let signs = u64::from_le_bytes(s8);
-        let mut si = 0u32;
-        for i in (256 - tau)..256 {
+        for (si, i) in ((256 - tau)..256).enumerate() {
             let j = loop {
                 let mut b = [0u8; 1];
                 r.read(&mut b);
@@ -1642,7 +1647,6 @@ mod sib_tests {
             };
             c[i] = c[j];
             c[j] = if (signs >> si) & 1 == 1 { -1 } else { 1 };
-            si += 1;
         }
         c
     }
@@ -1656,13 +1660,4 @@ mod sib_tests {
             assert_eq!(got.coeffs, expected, "mismatch for tau={tau}");
         }
     }
-}
-
-/// Calculate bit length of an integer
-fn bitlen(n: u32) -> usize {
-    if n == 0 {
-        return 0;
-    }
-
-    (32 - n.leading_zeros()) as usize
 }

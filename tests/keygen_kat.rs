@@ -28,9 +28,21 @@ macro_rules! kem_keygen_kat {
     };
 }
 
-kem_keygen_kat!(kem_512_keygen, fips203::ml_kem_512, turtl::kem::ParameterSet::MlKem512);
-kem_keygen_kat!(kem_768_keygen, fips203::ml_kem_768, turtl::kem::ParameterSet::MlKem768);
-kem_keygen_kat!(kem_1024_keygen, fips203::ml_kem_1024, turtl::kem::ParameterSet::MlKem1024);
+kem_keygen_kat!(
+    kem_512_keygen,
+    fips203::ml_kem_512,
+    turtl::kem::ParameterSet::MlKem512
+);
+kem_keygen_kat!(
+    kem_768_keygen,
+    fips203::ml_kem_768,
+    turtl::kem::ParameterSet::MlKem768
+);
+kem_keygen_kat!(
+    kem_1024_keygen,
+    fips203::ml_kem_1024,
+    turtl::kem::ParameterSet::MlKem1024
+);
 
 macro_rules! dsa_keygen_kat {
     ($name:ident, $refmod:path, $turtl:expr) => {
@@ -54,6 +66,18 @@ macro_rules! dsa_keygen_kat {
     };
 }
 
-dsa_keygen_kat!(dsa_44_keygen, fips204::ml_dsa_44, turtl::dsa::ParameterSet::MlDsa44);
-dsa_keygen_kat!(dsa_65_keygen, fips204::ml_dsa_65, turtl::dsa::ParameterSet::MlDsa65);
-dsa_keygen_kat!(dsa_87_keygen, fips204::ml_dsa_87, turtl::dsa::ParameterSet::MlDsa87);
+dsa_keygen_kat!(
+    dsa_44_keygen,
+    fips204::ml_dsa_44,
+    turtl::dsa::ParameterSet::MlDsa44
+);
+dsa_keygen_kat!(
+    dsa_65_keygen,
+    fips204::ml_dsa_65,
+    turtl::dsa::ParameterSet::MlDsa65
+);
+dsa_keygen_kat!(
+    dsa_87_keygen,
+    fips204::ml_dsa_87,
+    turtl::dsa::ParameterSet::MlDsa87
+);

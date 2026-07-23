@@ -115,7 +115,8 @@ pub(crate) fn ml_kem_decaps_internal(
     use crate::security::constant_time;
     use crate::security::fault_detection;
 
-    let is_equal = ciphertext.len() == c_prime.len() && fault_detection::ct_eq(ciphertext, &c_prime);
+    let is_equal =
+        ciphertext.len() == c_prime.len() && fault_detection::ct_eq(ciphertext, &c_prime);
 
     let mut k = [0u8; 32];
     for i in 0..32 {

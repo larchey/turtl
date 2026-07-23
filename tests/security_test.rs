@@ -133,7 +133,6 @@ fn test_fault_detection() {
     }
 }
 
-
 /// Test that the secure Montgomery reduction implementation properly
 /// handles inputs that could be manipulated by fault attacks
 #[test]

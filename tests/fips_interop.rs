@@ -25,7 +25,11 @@ macro_rules! kem_interop {
             let (ref_ss, ref_ct) = ek.try_encaps().unwrap();
             let ct = kem::Ciphertext::new(ref_ct.into_bytes().to_vec(), $turtl).unwrap();
             let turtl_ss = kem::decapsulate(&sk, &ct).unwrap();
-            assert_eq!(turtl_ss.as_bytes(), &ref_ss.into_bytes(), "ref->turtl ss mismatch");
+            assert_eq!(
+                turtl_ss.as_bytes(),
+                &ref_ss.into_bytes(),
+                "ref->turtl ss mismatch"
+            );
 
             // turtl encaps to ref's public key -> ref decapsulates
             let (ek2, dk2) = r::KG::try_keygen().unwrap();
@@ -34,14 +38,36 @@ macro_rules! kem_interop {
             let ct2_arr: [u8; $ct] = ct2.as_bytes().try_into().unwrap();
             let ref_ct2 = r::CipherText::try_from_bytes(ct2_arr).unwrap();
             let ref_ss2 = dk2.try_decaps(&ref_ct2).unwrap();
-            assert_eq!(turtl_ss2.as_bytes(), &ref_ss2.into_bytes(), "turtl->ref ss mismatch");
+            assert_eq!(
+                turtl_ss2.as_bytes(),
+                &ref_ss2.into_bytes(),
+                "turtl->ref ss mismatch"
+            );
         }
     };
 }
 
-kem_interop!(kem_512, fips203::ml_kem_512, kem::ParameterSet::MlKem512, 800, 768);
-kem_interop!(kem_768, fips203::ml_kem_768, kem::ParameterSet::MlKem768, 1184, 1088);
-kem_interop!(kem_1024, fips203::ml_kem_1024, kem::ParameterSet::MlKem1024, 1568, 1568);
+kem_interop!(
+    kem_512,
+    fips203::ml_kem_512,
+    kem::ParameterSet::MlKem512,
+    800,
+    768
+);
+kem_interop!(
+    kem_768,
+    fips203::ml_kem_768,
+    kem::ParameterSet::MlKem768,
+    1184,
+    1088
+);
+kem_interop!(
+    kem_1024,
+    fips203::ml_kem_1024,
+    kem::ParameterSet::MlKem1024,
+    1568,
+    1568
+);
 
 /// turtl sign -> ref verify, and ref sign -> turtl verify.
 macro_rules! dsa_interop {
@@ -57,7 +83,10 @@ macro_rules! dsa_interop {
             let pk_arr: [u8; $pk] = pk.as_bytes().try_into().unwrap();
             let ref_pk = r::PublicKey::try_from_bytes(pk_arr).expect("ref rejected turtl pk");
             let sig_arr: [u8; $sig] = sig.as_bytes().try_into().unwrap();
-            assert!(ref_pk.verify(msg, &sig_arr, b""), "ref failed to verify turtl signature");
+            assert!(
+                ref_pk.verify(msg, &sig_arr, b""),
+                "ref failed to verify turtl signature"
+            );
 
             // reference signs -> turtl verifies
             let (rpk, rsk) = r::try_keygen().unwrap();
@@ -72,9 +101,27 @@ macro_rules! dsa_interop {
     };
 }
 
-dsa_interop!(dsa_44, fips204::ml_dsa_44, dsa::ParameterSet::MlDsa44, 1312, 2420);
-dsa_interop!(dsa_65, fips204::ml_dsa_65, dsa::ParameterSet::MlDsa65, 1952, 3309);
-dsa_interop!(dsa_87, fips204::ml_dsa_87, dsa::ParameterSet::MlDsa87, 2592, 4627);
+dsa_interop!(
+    dsa_44,
+    fips204::ml_dsa_44,
+    dsa::ParameterSet::MlDsa44,
+    1312,
+    2420
+);
+dsa_interop!(
+    dsa_65,
+    fips204::ml_dsa_65,
+    dsa::ParameterSet::MlDsa65,
+    1952,
+    3309
+);
+dsa_interop!(
+    dsa_87,
+    fips204::ml_dsa_87,
+    dsa::ParameterSet::MlDsa87,
+    2592,
+    4627
+);
 
 // ---------------------------------------------------------------------------
 // Beyond one-shot conformance: robustness and properties that the per-set
@@ -138,7 +185,7 @@ fn many_iteration_roundtrips() {
 #[test]
 fn dsa_prehash_interop_shake128() {
     use fips204::ml_dsa_44;
-    use fips204::traits::{KeyGen as _, SerDes as _, Signer as _, Verifier as _};
+    use fips204::traits::{SerDes as _, Signer as _, Verifier as _};
     use fips204::Ph;
     use turtl::dsa::HashFunction;
 
@@ -146,7 +193,14 @@ fn dsa_prehash_interop_shake128() {
 
     // turtl signs (pre-hash) -> reference verifies
     let (pk, sk) = dsa::key_gen(dsa::ParameterSet::MlDsa44).unwrap();
-    let sig = dsa::hash_sign(&sk, msg, b"", HashFunction::SHAKE128, SigningMode::Deterministic).unwrap();
+    let sig = dsa::hash_sign(
+        &sk,
+        msg,
+        b"",
+        HashFunction::SHAKE128,
+        SigningMode::Deterministic,
+    )
+    .unwrap();
     let ref_pk = ml_dsa_44::PublicKey::try_from_bytes(pk.as_bytes().try_into().unwrap()).unwrap();
     let sig_arr: [u8; 2420] = sig.as_bytes().try_into().unwrap();
     assert!(
@@ -157,7 +211,8 @@ fn dsa_prehash_interop_shake128() {
     // reference signs (pre-hash) -> turtl verifies
     let (rpk, rsk) = ml_dsa_44::try_keygen().unwrap();
     let rsig = rsk.try_hash_sign(msg, b"", &Ph::SHAKE128).unwrap();
-    let turtl_pk = dsa::PublicKey::new(rpk.into_bytes().to_vec(), dsa::ParameterSet::MlDsa44).unwrap();
+    let turtl_pk =
+        dsa::PublicKey::new(rpk.into_bytes().to_vec(), dsa::ParameterSet::MlDsa44).unwrap();
     let turtl_sig = dsa::Signature::new(rsig.to_vec(), dsa::ParameterSet::MlDsa44).unwrap();
     assert!(
         dsa::hash_verify(&turtl_pk, msg, &turtl_sig, b"", HashFunction::SHAKE128).unwrap(),

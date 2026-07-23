@@ -65,7 +65,6 @@ fn test_ct_eq_extremes() {
     assert!(!ct_eq(&zeros, &ones), "All zeros != all ones");
 }
 
-
 /// Test bounds verification with valid values
 #[test]
 fn test_verify_bounds_valid() {

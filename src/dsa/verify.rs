@@ -44,7 +44,6 @@ pub fn hash_verify(
     context: &[u8],
     hash_function: HashFunction,
 ) -> Result<bool> {
-
     // Check if context is valid (max 255 bytes)
     if context.len() > 255 {
         return Err(Error::ContextTooLong);

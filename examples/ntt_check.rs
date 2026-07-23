@@ -48,12 +48,25 @@ fn main() {
         if prod.coeffs[i] != expected.coeffs[i] {
             mismatches += 1;
             if mismatches <= 5 {
-                println!("  coeff[{i}]: ntt={} schoolbook={}", prod.coeffs[i], expected.coeffs[i]);
+                println!(
+                    "  coeff[{i}]: ntt={} schoolbook={}",
+                    prod.coeffs[i], expected.coeffs[i]
+                );
             }
         }
     }
-    println!("ML-KEM NTT multiply vs schoolbook: {} / 256 mismatches", mismatches);
-    println!("RESULT: {}", if mismatches == 0 { "CORRECT" } else { "WRONG — multiply_ntt is not negacyclic convolution" });
+    println!(
+        "ML-KEM NTT multiply vs schoolbook: {} / 256 mismatches",
+        mismatches
+    );
+    println!(
+        "RESULT: {}",
+        if mismatches == 0 {
+            "CORRECT"
+        } else {
+            "WRONG — multiply_ntt is not negacyclic convolution"
+        }
+    );
 
     // ML-DSA (q = 8380417)
     const QD: i64 = 8380417;
@@ -86,7 +99,10 @@ fn main() {
         if dprod.coeffs[i].rem_euclid(QD as i32) != dexp.coeffs[i] {
             dm += 1;
             if dm <= 5 {
-                println!("  D coeff[{i}]: ntt={} schoolbook={}", dprod.coeffs[i], dexp.coeffs[i]);
+                println!(
+                    "  D coeff[{i}]: ntt={} schoolbook={}",
+                    dprod.coeffs[i], dexp.coeffs[i]
+                );
             }
         }
     }
