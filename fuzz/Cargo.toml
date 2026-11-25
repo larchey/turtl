@@ -1,0 +1,63 @@
+[package]
+name = "turtl-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+turtl = { path = ".." }
+fips203 = "0.4"
+fips204 = "0.4"
+
+# Not part of the parent workspace.
+[workspace]
+members = ["."]
+
+[profile.release]
+debug = 1
+
+[[bin]]
+name = "kem_decaps"
+path = "fuzz_targets/kem_decaps.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "kem_encaps"
+path = "fuzz_targets/kem_encaps.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "kem_dk"
+path = "fuzz_targets/kem_dk.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "dsa_verify"
+path = "fuzz_targets/dsa_verify.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "dsa_pk"
+path = "fuzz_targets/dsa_pk.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "dsa_sk"
+path = "fuzz_targets/dsa_sk.rs"
+test = false
+doc = false
+bench = false
