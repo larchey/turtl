@@ -4,6 +4,7 @@
 //! which use different moduli and parameters.
 
 use super::poly::Polynomial;
+use super::reduce::{barrett_for, ct_mod, ct_normalize_small};
 use crate::error::Result;
 
 /// NTT implementation for a specific cryptographic algorithm
@@ -25,8 +26,8 @@ pub struct NTTContext {
     pub qinv: i32,
     /// Precomputed zeta values for NTT
     zetas: Vec<i32>,
-    /// Montgomery constant R^2 mod q (for conversion to Montgomery form)
-    r2: i32,
+    /// Barrett constant ⌊2^64 / q⌋ for constant-time reduction
+    barrett: i128,
 }
 
 impl NTTContext {
@@ -37,7 +38,6 @@ impl NTTContext {
                 // ML-KEM parameters from FIPS 203
                 let modulus = 3329;
                 let qinv = 3327; // q^(-1) mod 2^16 for ML-KEM
-                let r2 = 169; // 2^16^2 mod 3329 = 169 (corrected value)
 
                 // Precomputed zetas for ML-KEM (n = 256, q = 3329)
                 // Root of unity ζ = 17
@@ -48,14 +48,13 @@ impl NTTContext {
                     modulus,
                     qinv,
                     zetas,
-                    r2,
+                    barrett: barrett_for(modulus),
                 }
             }
             NTTType::MLDSA => {
                 // ML-DSA parameters from FIPS 204
                 let modulus = 8380417;
                 let qinv = 58728449; // q^(-1) mod 2^32 for ML-DSA
-                let r2 = 2365951; // 2^64 mod 8380417
 
                 // Precomputed zetas for ML-DSA
                 let zetas = Self::precompute_zetas_mldsa();
@@ -65,7 +64,7 @@ impl NTTContext {
                     modulus,
                     qinv,
                     zetas,
-                    r2,
+                    barrett: barrett_for(modulus),
                 }
             }
         }
@@ -126,7 +125,7 @@ impl NTTContext {
         ]
     }
 
-    /// Perform Montgomery reduction based on the current modulus with fault detection
+    /// Perform Montgomery reduction based on the current modulus.
     #[inline(always)]
     fn montgomery_reduce(&self, a: i64) -> i32 {
         match self.ntt_type {
@@ -140,12 +139,8 @@ impl NTTContext {
                 let t: u32 = ((u32_a & 0xFFFF) * u32_qinv) & 0xFFFF;
                 let v: i32 = ((a as i32) - (t as i32 * self.modulus)) >> 16;
 
-                // Ensure the result is in [0, q-1]
-                if v < 0 {
-                    v + self.modulus
-                } else {
-                    v
-                }
+                // Ensure the result is in [0, q-1] (branchless)
+                v + (self.modulus & (v >> 31))
             }
             NTTType::MLDSA => {
                 // 32-bit Montgomery reduction for ML-DSA
@@ -158,116 +153,18 @@ impl NTTContext {
         }
     }
 
-    /// Convert a value to Montgomery form with fault detection
-    /// This function will have additional fault detection for security-critical operations.
-    ///
-    /// # Security Notes
-    ///
-    /// This function includes extensive bounds checking and fault detection mechanisms
-    /// to prevent fault injection attacks that could manipulate input or output values.
-    /// It should be used in security-critical operations where fault resistance is important.
-    ///
-    /// # Arguments
-    ///
-    /// * `a` - The value to convert to Montgomery form
-    ///
-    /// # Returns
-    ///
-    /// The value in Montgomery form with additional security checks
-    pub fn to_montgomery_secure(&self, a: i32) -> i32 {
-        // Verify input is in the expected range [0, q-1]
-        if a < 0 || a >= self.modulus {
-            // For fault attack resistance, clamp to valid range
-            let a_valid = a.rem_euclid(self.modulus);
-
-            // Calculate safely by avoiding potential overflows
-            let mult = (a_valid as i64) * (self.r2 as i64);
-            return self.montgomery_reduce_secure(mult);
-        }
-
-        // Normal processing for valid inputs (using secure reduction for consistency)
-        let mult = (a as i64) * (self.r2 as i64);
-        self.montgomery_reduce_secure(mult)
+    /// `x mod q` in `[0, q)`, constant time (no divide, no secret branch).
+    #[inline(always)]
+    fn reduce(&self, x: i64) -> i32 {
+        ct_mod(x, self.modulus, self.barrett)
     }
 
-    /// Perform Montgomery reduction with fault detection.
-    /// This function includes additional security checks for fault resistance.
-    ///
-    /// # Security Notes
-    ///
-    /// This function includes bounds checking and fault detection mechanisms
-    /// to prevent fault injection attacks. It should be used in security-critical
-    /// operations where fault resistance is important.
-    ///
-    /// # Arguments
-    ///
-    /// * `a` - The value to reduce
-    ///
-    /// # Returns
-    ///
-    /// The Montgomery-reduced value with additional security checks
-    pub fn montgomery_reduce_secure(&self, a: i64) -> i32 {
-        // For extreme inputs that would cause overflow in the normal reduction,
-        // we directly compute a mod q using rem_euclid, which is slower but safer
-        if a.abs() > i64::MAX / 2 {
-            return (a % (self.modulus as i64)).rem_euclid(self.modulus as i64) as i32;
+    /// Bring every coefficient into `[0, q)`, constant time.
+    #[inline]
+    fn normalize(&self, p: &mut Polynomial) {
+        for c in p.coeffs.iter_mut() {
+            *c = self.reduce(*c as i64);
         }
-
-        // For inputs in the normal range but outside of the optimal range for Montgomery reduction
-        // Check using a safe comparison to avoid overflow
-        let modulus_i64 = self.modulus as i64;
-        if a < 0 || a >= modulus_i64 || (a > 0 && modulus_i64 > i64::MAX / modulus_i64) {
-            // Just use mod q directly for these inputs, which is safer
-            return (a % modulus_i64).rem_euclid(modulus_i64) as i32;
-        }
-
-        // Normal processing for valid inputs
-        match self.ntt_type {
-            NTTType::MLKEM => {
-                // Standard Montgomery reduction for ML-KEM with safety handling
-                // Cast properly to avoid overflow
-                let u32_a = a as u32;
-                let u32_qinv = self.qinv as u32;
-
-                // Perform 16-bit Montgomery reduction
-                let t: u32 = ((u32_a & 0xFFFF) * u32_qinv) & 0xFFFF;
-                let v: i32 = ((a as i32) - (t as i32 * self.modulus)) >> 16;
-
-                // Ensure the result is in [0, q-1]
-                let result = if v < 0 { v + self.modulus } else { v };
-
-                // Verify result is in range [0, q-1]
-                if result < 0 || result >= self.modulus {
-                    result.rem_euclid(self.modulus)
-                } else {
-                    result
-                }
-            }
-            NTTType::MLDSA => {
-                // Standard Montgomery reduction for ML-DSA with safety check
-                // Implementation follows reference Dilithium
-                if a >= (i32::MAX as i64) * 2 {
-                    // Too large for the 32-bit reduction, use direct modulo
-                    return (a % (self.modulus as i64)) as i32;
-                }
-
-                // CRITICAL: Multiply at i32 level first, then extend to i64 to avoid overflow
-                let t = ((a as i32).wrapping_mul(self.qinv)) as i64;
-                let result = ((a - t * (self.modulus as i64)) >> 32) as i32;
-
-                // Verify result is in range [0, q-1]
-                if result < 0 || result >= self.modulus {
-                    return result.rem_euclid(self.modulus);
-                }
-
-                result
-            }
-        }
-    }
-
-    /// Convert to Montgomery form
-    pub fn to_montgomery(&self, a: i32) -> i32 {
-        self.montgomery_reduce(a as i64 * self.r2 as i64)
     }
 
     /// Convert from Montgomery form
@@ -293,8 +190,9 @@ impl NTTContext {
     /// Forward NTT transform for ML-KEM (q = 3329)
     /// This is a complete reimplementation according to FIPS 203
     fn forward_mlkem(&self, polynomial: &mut Polynomial) -> Result<()> {
-        // Make a copy to work with
+        // Make a copy to work with, reduced into [0, q)
         let mut a = polynomial.clone();
+        self.normalize(&mut a);
 
         // Initialize counters
         let mut k: usize = 1;
@@ -311,17 +209,10 @@ impl NTTContext {
                 // Process blocks of length len
                 for i in j..(j + len) {
                     // Compute the butterfly
-                    let t = ((zeta as i64 * a.coeffs[i + len] as i64) % self.modulus as i64) as i32;
-
-                    a.coeffs[i + len] = (a.coeffs[i] - t) % self.modulus;
-                    if a.coeffs[i + len] < 0 {
-                        a.coeffs[i + len] += self.modulus;
-                    }
-
-                    a.coeffs[i] = (a.coeffs[i] + t) % self.modulus;
-                    if a.coeffs[i] >= self.modulus {
-                        a.coeffs[i] -= self.modulus;
-                    }
+                    let t = self.reduce(zeta as i64 * a.coeffs[i + len] as i64);
+                    let x = a.coeffs[i];
+                    a.coeffs[i + len] = ct_normalize_small(x - t, self.modulus);
+                    a.coeffs[i] = ct_normalize_small(x + t, self.modulus);
                 }
 
                 j += 2 * len;
@@ -342,11 +233,7 @@ impl NTTContext {
     fn forward_mldsa(&self, polynomial: &mut Polynomial) -> Result<()> {
         // First, normalize input coefficients to [0, q-1] range
         // ML-DSA uses centered representation, so negative values need to be converted
-        for coeff in polynomial.coeffs.iter_mut() {
-            if *coeff < 0 || *coeff >= self.modulus {
-                *coeff = coeff.rem_euclid(self.modulus);
-            }
-        }
+        self.normalize(polynomial);
 
         let mut k = 0; // Start from k=0, will pre-increment to k=1 on first use
         let mut len = 128;
@@ -370,9 +257,7 @@ impl NTTContext {
         }
 
         // Reduce all coefficients to canonical form [0, q-1]
-        for coeff in polynomial.coeffs.iter_mut() {
-            *coeff = coeff.rem_euclid(self.modulus);
-        }
+        self.normalize(polynomial);
 
         Ok(())
     }
@@ -388,8 +273,9 @@ impl NTTContext {
     /// Inverse NTT transform for ML-KEM
     /// Completely reimplemented according to FIPS 203
     fn inverse_mlkem(&self, polynomial: &mut Polynomial) -> Result<()> {
-        // Make a copy to work with
+        // Make a copy to work with, reduced into [0, q)
         let mut a = polynomial.clone();
+        self.normalize(&mut a);
 
         // Initialize indices
         let mut k: usize = 127; // Start from the highest zeta index (bit-reversed)
@@ -409,19 +295,12 @@ impl NTTContext {
                     let t = a.coeffs[i];
 
                     // Compute the inverse butterfly
-                    a.coeffs[i] = (t + a.coeffs[i + len]) % self.modulus;
-                    if a.coeffs[i] >= self.modulus {
-                        a.coeffs[i] -= self.modulus;
-                    }
-
-                    a.coeffs[i + len] = (t - a.coeffs[i + len]) % self.modulus;
-                    if a.coeffs[i + len] < 0 {
-                        a.coeffs[i + len] += self.modulus;
-                    }
+                    let u = a.coeffs[i + len];
+                    a.coeffs[i] = ct_normalize_small(t + u, self.modulus);
+                    let d = ct_normalize_small(t - u, self.modulus);
 
                     // Multiply by inverse twiddle factor
-                    a.coeffs[i + len] =
-                        ((zeta_inv as i64 * a.coeffs[i + len] as i64) % self.modulus as i64) as i32;
+                    a.coeffs[i + len] = self.reduce(zeta_inv as i64 * d as i64);
                 }
 
                 j += 2 * len;
@@ -433,15 +312,7 @@ impl NTTContext {
         // Multiply by n^(-1) mod q = 3303 for ML-KEM (256^(-1) mod 3329)
         let n_inv = 3303;
         for i in 0..256 {
-            a.coeffs[i] = ((n_inv as i64 * a.coeffs[i] as i64) % self.modulus as i64) as i32;
-
-            // Ensure result is in range [0, q-1]
-            if a.coeffs[i] < 0 {
-                a.coeffs[i] += self.modulus;
-            }
-            if a.coeffs[i] >= self.modulus {
-                a.coeffs[i] -= self.modulus;
-            }
+            a.coeffs[i] = self.reduce(n_inv as i64 * a.coeffs[i] as i64);
         }
 
         // Copy back to input polynomial
@@ -455,11 +326,7 @@ impl NTTContext {
     /// Implementation follows reference Dilithium: https://github.com/pq-crystals/dilithium/blob/master/ref/ntt.c
     fn inverse_mldsa(&self, polynomial: &mut Polynomial) -> Result<()> {
         // Normalize input coefficients to [0, q-1] range
-        for coeff in polynomial.coeffs.iter_mut() {
-            if *coeff < 0 || *coeff >= self.modulus {
-                *coeff = coeff.rem_euclid(self.modulus);
-            }
-        }
+        self.normalize(polynomial);
 
         // Reference uses k=256, pre-decrements to 255 on first use
         // Forward uses k going 1..256, inverse uses k going 255..1
@@ -503,9 +370,7 @@ impl NTTContext {
         self.poly_from_montgomery(polynomial);
 
         // Final reduction to ensure all coefficients are in [0, q-1]
-        for coeff in polynomial.coeffs.iter_mut() {
-            *coeff = coeff.rem_euclid(self.modulus);
-        }
+        self.normalize(polynomial);
 
         Ok(())
     }
@@ -520,33 +385,28 @@ impl NTTContext {
                 // degree-2 factors (x^2 - zeta^(2·bitrev7(i)+1)). Multiplication is
                 // therefore BaseCaseMultiply over 128 coefficient pairs, NOT pointwise.
                 // FIPS 203 Algorithm 12.
-                let q = self.modulus as i64;
                 for i in 0..128 {
                     // gamma_i = zeta^(2·bitrev7(i)+1) = (zetas[i]^2 · 17) mod q,
                     // since zetas[i] = 17^bitrev7(i).
                     let z = self.zetas[i] as i64;
-                    let gamma = (z * z % q) * 17 % q;
+                    let gamma = self.reduce(self.reduce(z * z) as i64 * 17) as i64;
 
-                    let a0 = a.coeffs[2 * i] as i64;
-                    let a1 = a.coeffs[2 * i + 1] as i64;
-                    let b0 = b.coeffs[2 * i] as i64;
-                    let b1 = b.coeffs[2 * i + 1] as i64;
+                    let a0 = self.reduce(a.coeffs[2 * i] as i64) as i64;
+                    let a1 = self.reduce(a.coeffs[2 * i + 1] as i64) as i64;
+                    let b0 = self.reduce(b.coeffs[2 * i] as i64) as i64;
+                    let b1 = self.reduce(b.coeffs[2 * i + 1] as i64) as i64;
 
-                    // c0 = a0·b0 + a1·b1·gamma ; c1 = a0·b1 + a1·b0
-                    let c0 = (a0 * b0 % q + (a1 * b1 % q) * gamma % q).rem_euclid(q);
-                    let c1 = (a0 * b1 % q + a1 * b0 % q).rem_euclid(q);
-
-                    result.coeffs[2 * i] = c0 as i32;
-                    result.coeffs[2 * i + 1] = c1 as i32;
+                    // c0 = a0·b0 + a1·b1·gamma ; c1 = a0·b1 + a1·b0  (all < 2^62)
+                    let a1b1 = self.reduce(a1 * b1) as i64;
+                    result.coeffs[2 * i] = self.reduce(a0 * b0 + a1b1 * gamma);
+                    result.coeffs[2 * i + 1] = self.reduce(a0 * b1 + a1 * b0);
                 }
             }
             NTTType::MLDSA => {
                 // ML-DSA's NTT is a full transform (x^256+1 splits into linears),
                 // so NTT-domain multiplication is coefficient-wise.
                 for i in 0..256 {
-                    let prod =
-                        ((a.coeffs[i] as i64 * b.coeffs[i] as i64) % self.modulus as i64) as i32;
-                    result.coeffs[i] = prod;
+                    result.coeffs[i] = self.reduce(a.coeffs[i] as i64 * b.coeffs[i] as i64);
                 }
             }
         }
@@ -557,11 +417,6 @@ impl NTTContext {
     /// Get the modulus based on NTT type
     pub fn get_modulus(&self) -> i32 {
         self.modulus
-    }
-
-    /// Get the NTT type
-    pub fn get_ntt_type(&self) -> NTTType {
-        self.ntt_type
     }
 }
 
