@@ -14,43 +14,43 @@
 //! * Simple, developer-friendly API
 //! * No `unsafe` code
 //!
-//! ## Status
+//! ## Security
 //!
-//! This crate is **not** yet hardened against timing/power side-channels and has not had an
-//! independent audit. See `SECURITY_REVIEW_2026-07.md`. Not yet suitable for production use.
+//! Secret-dependent arithmetic is branch-free and division-free, secrets are zeroized on drop,
+//! and conformance is checked against reference implementations, including adversarial
+//! differential fuzzing. See `SECURITY.md` for the evidence and the remaining limitations
+//! (notably: no independent audit yet).
 //!
 //! ## Examples
 //!
 //! ### Key Encapsulation (ML-KEM)
 //!
 //! ```
-//! # fn main() {
-//! use turtl::kem::{ParameterSet};
+//! use turtl::kem::{decapsulate, encapsulate, KeyPair, ParameterSet};
 //!
-//! // Display available parameter sets for ML-KEM
-//! println!("ML-KEM parameter sets for each security level:");
-//! println!("Security level 1: {:?}", ParameterSet::MlKem512);
-//! println!("Security level 3: {:?}", ParameterSet::MlKem768);
-//! println!("Security level 5: {:?}", ParameterSet::MlKem1024);
+//! # fn main() -> turtl::Result<()> {
+//! let keypair = KeyPair::generate(ParameterSet::MlKem768)?;
+//! let (ciphertext, sender_secret) = encapsulate(&keypair.public_key())?;
+//! let receiver_secret = decapsulate(&keypair.private_key(), &ciphertext)?;
+//! assert_eq!(sender_secret, receiver_secret);
+//! # Ok(())
 //! # }
 //! ```
 //!
 //! ### Digital Signatures (ML-DSA)
 //!
 //! ```
-//! # fn main() {
-//! use turtl::dsa::{ParameterSet};
+//! use turtl::dsa::{sign, verify, KeyPair, ParameterSet, SigningMode};
 //!
-//! // Display available parameter sets for ML-DSA
-//! println!("ML-DSA parameter sets for each security level:");
-//! println!("Security level 2: {:?}", ParameterSet::MlDsa44);
-//! println!("Security level 3: {:?}", ParameterSet::MlDsa65);
-//! println!("Security level 5: {:?}", ParameterSet::MlDsa87);
+//! # fn main() -> turtl::Result<()> {
+//! let keypair = KeyPair::generate(ParameterSet::MlDsa65)?;
+//! let signature = sign(&keypair.private_key(), b"hello", b"", SigningMode::Hedged)?;
+//! assert!(verify(&keypair.public_key(), b"hello", &signature, b"")?);
+//! # Ok(())
 //! # }
 //! ```
 
 #![forbid(unsafe_code)]
-#![cfg_attr(not(feature = "std"), no_std)]
 // Allow certain clippy lints that require extensive refactoring
 #![allow(clippy::needless_range_loop)]
 #![allow(clippy::type_complexity)]
@@ -61,9 +61,16 @@ pub mod error;
 pub mod kem;
 pub mod security;
 
-// Export the common module so it's accessible to benchmarks
+// Internal arithmetic, public only so the benchmarks can reach it. Not a
+// supported API.
+#[doc(hidden)]
 pub mod common;
 
 // Re-exports for convenience
 pub use error::Error;
 pub use error::Result;
+
+// Compile and run the README examples as doctests.
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+struct ReadmeDoctests;
