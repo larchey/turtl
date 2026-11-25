@@ -2,32 +2,28 @@
 name = "turtl"
 version = "1.0.0"
 edition = "2021"
-authors = ["Charl charley.hoffm@gmail.com"]
+authors = ["Charl <charley.hoffm@gmail.com>"]
 description = "Trusted Uniform Rust Toolkit for Lattice-cryptography - Post-Quantum Cryptography Implementation"
 repository = "https://github.com/larchey/turtl"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
+rust-version = "1.88"
+exclude = ["docs/*.pdf", ".github/", "fuzz/", "CLAUDE.md", "rust-toolchain.toml"]
 keywords = ["cryptography", "post-quantum", "lattice", "kem", "signature"]
 categories = ["cryptography"]
 
 [dependencies]
-rand = { version = "0.8", default-features = false }
-rand_chacha = { version = "0.3", default-features = false }
-sha3 = { version = "0.10", default-features = false }
-zeroize = { version = "1.5", features = ["zeroize_derive"] }
-thiserror = "1.0"
+rand = { version = "0.8.6", default-features = false, features = ["std", "getrandom"] }
+sha3 = "0.10"
+zeroize = "1.5"
 
 [dev-dependencies]
-criterion = "0.4"
+criterion = "0.5"
+rand_chacha = "0.3"
 hex = "0.4"
 # Reference FIPS implementations, used ONLY for interoperability cross-checks in tests/examples.
 fips203 = "0.4"
 fips204 = "0.4"
-
-[features]
-default = ["std"]
-std = ["rand/std", "rand_chacha/std", "sha3/std"]
-nightly = ["std"]
 
 [[bench]]
 name = "ntt_benchmark"

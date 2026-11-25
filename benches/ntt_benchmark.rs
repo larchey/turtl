@@ -3,6 +3,9 @@
 //! This module contains benchmarks for the NTT and its inverse,
 //! which are critical operations in both ML-KEM and ML-DSA.
 
+// Index loops mirror the spec's coefficient-wise formulas.
+#![allow(clippy::needless_range_loop)]
+
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
