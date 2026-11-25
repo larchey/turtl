@@ -3,6 +3,7 @@
 //! This module implements basic polynomial arithmetic in the ring
 //! ℤq\[X\]/(X^256 + 1) used by both ML-KEM and ML-DSA.
 
+use super::reduce::{barrett_for, ct_mod};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// A polynomial in the ring ℤq\[X\]/(X^256 + 1)
@@ -15,15 +16,19 @@ pub struct Polynomial {
 // Manual implementation of Zeroize
 impl Zeroize for Polynomial {
     fn zeroize(&mut self) {
-        // Zeroize all coefficients
-        for coeff in &mut self.coeffs {
-            *coeff = 0;
-        }
+        self.coeffs.zeroize();
     }
 }
 
-// Manual implementation of ZeroizeOnDrop
 impl ZeroizeOnDrop for Polynomial {}
+
+// Polynomials carry secrets (s, e, y, decoded private keys, ...), so every one
+// is wiped when it goes out of scope.
+impl Drop for Polynomial {
+    fn drop(&mut self) {
+        self.coeffs.zeroize();
+    }
+}
 
 impl Default for Polynomial {
     fn default() -> Self {
@@ -37,45 +42,19 @@ impl Polynomial {
         Self { coeffs: [0; 256] }
     }
 
-    /// Create a new polynomial from an array of coefficients
-    pub fn from_coeffs(coeffs: [i32; 256]) -> Self {
-        Self { coeffs }
-    }
-
-    /// Create a new polynomial with all coefficients set to a single value
-    pub fn from_value(value: i32) -> Self {
-        Self {
-            coeffs: [value; 256],
-        }
-    }
-
     /// Add another polynomial to this one (modulo q)
     pub fn add_assign(&mut self, other: &Self, modulus: i32) {
+        let m = barrett_for(modulus);
         for i in 0..256 {
-            self.coeffs[i] = (self.coeffs[i] + other.coeffs[i]) % modulus;
-            if self.coeffs[i] < 0 {
-                self.coeffs[i] += modulus;
-            }
+            self.coeffs[i] = ct_mod(self.coeffs[i] as i64 + other.coeffs[i] as i64, modulus, m);
         }
     }
 
     /// Subtract another polynomial from this one (modulo q)
     pub fn sub_assign(&mut self, other: &Self, modulus: i32) {
+        let m = barrett_for(modulus);
         for i in 0..256 {
-            self.coeffs[i] = (self.coeffs[i] - other.coeffs[i]) % modulus;
-            if self.coeffs[i] < 0 {
-                self.coeffs[i] += modulus;
-            }
-        }
-    }
-
-    /// Multiply this polynomial by a scalar (modulo q)
-    pub fn scalar_mul_assign(&mut self, scalar: i32, modulus: i32) {
-        for i in 0..256 {
-            self.coeffs[i] = ((self.coeffs[i] as i64 * scalar as i64) % modulus as i64) as i32;
-            if self.coeffs[i] < 0 {
-                self.coeffs[i] += modulus;
-            }
+            self.coeffs[i] = ct_mod(self.coeffs[i] as i64 - other.coeffs[i] as i64, modulus, m);
         }
     }
 
@@ -94,20 +73,19 @@ impl Polynomial {
 
     /// Compute the infinity norm using centered representation modulo q
     /// This is needed for ML-DSA norm checks
+    ///
+    /// Branchless: the coefficients are secret during signing.
     pub fn infinity_norm_centered(&self, modulus: i32) -> i32 {
         let half_q = modulus / 2;
-        let mut max = 0;
+        let mut max = 0i32;
         for &coeff in &self.coeffs {
-            // Convert to centered representation [-q/2, q/2]
-            let centered = if coeff > half_q {
-                coeff - modulus
-            } else {
-                coeff
-            };
-            let abs = centered.abs();
-            if abs > max {
-                max = abs;
-            }
+            // centered = coeff - q if coeff > q/2
+            let centered = coeff - (modulus & ((half_q - coeff) >> 31));
+            let sign = centered >> 31;
+            let abs = (centered ^ sign) - sign;
+            // max = max(max, abs)
+            let diff = max - abs;
+            max -= diff & (diff >> 31);
         }
         max
     }
@@ -116,30 +94,16 @@ impl Polynomial {
     /// Converts coefficients from [0, q-1] to [-q/2, q/2]
     pub fn to_centered_representation(&mut self, modulus: i32) {
         let half_q = modulus / 2;
-        for i in 0..256 {
-            if self.coeffs[i] > half_q {
-                self.coeffs[i] -= modulus;
-            }
+        for c in self.coeffs.iter_mut() {
+            *c -= modulus & ((half_q - *c) >> 31);
         }
-    }
-
-    /// Check if all coefficients are within a given range
-    pub fn coeffs_in_range(&self, min: i32, max: i32) -> bool {
-        self.coeffs.iter().all(|&c| c >= min && c <= max)
-    }
-
-    /// Count the number of non-zero coefficients
-    pub fn hamming_weight(&self) -> usize {
-        self.coeffs.iter().filter(|&&c| c != 0).count()
     }
 
     /// Reduce all coefficients modulo q
     pub fn reduce_modulo(&mut self, modulus: i32) {
-        for i in 0..256 {
-            self.coeffs[i] %= modulus;
-            if self.coeffs[i] < 0 {
-                self.coeffs[i] += modulus;
-            }
+        let m = barrett_for(modulus);
+        for c in self.coeffs.iter_mut() {
+            *c = ct_mod(*c as i64, modulus, m);
         }
     }
 }

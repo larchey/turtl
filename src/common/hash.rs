@@ -7,6 +7,7 @@ use sha3::{
     digest::{ExtendableOutput, Update, XofReader},
     Digest, Sha3_256, Sha3_512, Shake128, Shake256,
 };
+use zeroize::Zeroizing;
 
 /// Hash/XOF function type
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -99,7 +100,9 @@ impl SHAKE256Context {
     }
 
     /// Squeeze output bytes
-    pub fn squeeze(&mut self, output_len: usize) -> Vec<u8> {
+    ///
+    /// The output is wiped on drop, since callers sample secrets from it.
+    pub fn squeeze(&mut self, output_len: usize) -> Zeroizing<Vec<u8>> {
         // Finalize on first squeeze, then reuse reader to advance state
         if self.reader.is_none() {
             // Move inner out and finalize it (can't clone - need to consume)
@@ -107,7 +110,7 @@ impl SHAKE256Context {
             self.reader = Some(hasher.finalize_xof());
         }
 
-        let mut output = vec![0u8; output_len];
+        let mut output = Zeroizing::new(vec![0u8; output_len]);
         self.reader.as_mut().unwrap().read(&mut output);
         output
     }
@@ -134,7 +137,9 @@ impl SHAKE128Context {
     }
 
     /// Squeeze output bytes
-    pub fn squeeze(&mut self, output_len: usize) -> Vec<u8> {
+    ///
+    /// The output is wiped on drop, since callers sample secrets from it.
+    pub fn squeeze(&mut self, output_len: usize) -> Zeroizing<Vec<u8>> {
         // Finalize on first squeeze, then reuse reader to advance state
         if self.reader.is_none() {
             // Move inner out and finalize it (can't clone - need to consume)
@@ -142,7 +147,7 @@ impl SHAKE128Context {
             self.reader = Some(hasher.finalize_xof());
         }
 
-        let mut output = vec![0u8; output_len];
+        let mut output = Zeroizing::new(vec![0u8; output_len]);
         self.reader.as_mut().unwrap().read(&mut output);
         output
     }
@@ -211,7 +216,7 @@ mod tests {
         let expected = shake256(b"TURTL test input", 32);
 
         // Compare outputs
-        assert_eq!(output1, expected);
+        assert_eq!(*output1, expected);
 
         // For testing different outputs after multiple squeezes,
         // we need to reset the context and absorb new data

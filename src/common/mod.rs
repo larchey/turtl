@@ -1,15 +1,7 @@
-//! Common functionality shared between ML-KEM and ML-DSA implementations.
-//!
-//! This module contains shared utilities including:
-//! - Number-Theoretic Transform (NTT) operations
-//! - Polynomial arithmetic
-//! - Ring arithmetic
-//! - Random sampling functions
-//! - Encoding/decoding utilities
-//! - Hash function wrappers
+//! Common functionality shared between ML-KEM and ML-DSA implementations:
+//! the Number-Theoretic Transform, polynomial arithmetic, and hash wrappers.
 
-pub mod coding;
 pub mod hash;
 pub mod ntt;
 pub mod poly;
-pub mod ring;
+pub mod reduce;
