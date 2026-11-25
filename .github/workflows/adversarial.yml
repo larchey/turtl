@@ -1,0 +1,94 @@
+name: Adversarial
+
+# Attacks turtl from three directions and fails on any finding:
+#   1. differential  - seeded structure-aware mutations of real keys, ciphertexts
+#                      and signatures, checked against the fips203/fips204
+#                      reference implementations (tests/adversarial.rs)
+#   2. fuzz          - coverage-guided libFuzzer runs of the same oracles
+#                      (fuzz/fuzz_targets/*); crashes are uploaded as artifacts
+#   3. timing        - dudect-style Welch t-tests on decapsulation and the
+#                      constant-time helpers, with a known-leaky control
+# See ADVERSARIAL.md for how to reproduce a finding locally.
+
+on:
+  schedule:
+    - cron: "17 3 * * *" # nightly
+  workflow_dispatch:
+    inputs:
+      fuzz_seconds:
+        description: "Seconds per fuzz target"
+        default: "600"
+      differential_iters:
+        description: "Mutations per oracle and parameter set"
+        default: "5000"
+  pull_request:
+    paths:
+      - "src/**"
+      - "fuzz/**"
+      - "tests/adversarial.rs"
+      - "tests/timing_leakage.rs"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: adversarial-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  differential:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Differential oracles (fresh seed each run)
+        env:
+          TURTL_ADV_ITERS: ${{ github.event.inputs.differential_iters || (github.event_name == 'pull_request' && '500') || '5000' }}
+          TURTL_ADV_SEED: ${{ github.run_id }}
+        run: |
+          echo "Reproduce with: TURTL_ADV_SEED=$TURTL_ADV_SEED TURTL_ADV_ITERS=$TURTL_ADV_ITERS cargo test --release --test adversarial"
+          cargo test --release --test adversarial
+
+  fuzz:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [kem_decaps, kem_encaps, kem_dk, dsa_verify, dsa_pk, dsa_sk]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: nightly
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+      - name: Restore corpus
+        uses: actions/cache@v4
+        with:
+          path: fuzz/corpus/${{ matrix.target }}
+          key: fuzz-corpus-${{ matrix.target }}-${{ github.run_id }}
+          restore-keys: fuzz-corpus-${{ matrix.target }}-
+      - name: Fuzz ${{ matrix.target }}
+        working-directory: fuzz
+        env:
+          SECS: ${{ github.event.inputs.fuzz_seconds || (github.event_name == 'pull_request' && '120') || '600' }}
+        run: cargo +nightly fuzz run ${{ matrix.target }} -- -max_total_time=$SECS -rss_limit_mb=4096
+      - name: Upload crash artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-artifacts-${{ matrix.target }}
+          path: fuzz/artifacts/${{ matrix.target }}
+
+  timing:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Timing-leakage t-tests
+        env:
+          TURTL_TIMING_SAMPLES: "50000"
+        run: cargo test --release --test timing_leakage -- --ignored --test-threads=1 --nocapture
