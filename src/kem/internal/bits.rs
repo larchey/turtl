@@ -1,9 +1,13 @@
 //! Auxiliary functions for ML-KEM.
 //!
 //! This module provides helper functions used in the ML-KEM implementation.
+use zeroize::Zeroizing;
+
 /// Convert between bytes and bits
-pub(crate) fn bytes_to_bits(bytes: &[u8]) -> Vec<u8> {
-    let mut bits = Vec::with_capacity(bytes.len() * 8);
+///
+/// The buffer is wiped on drop: it often holds bits of secret coefficients.
+pub(crate) fn bytes_to_bits(bytes: &[u8]) -> Zeroizing<Vec<u8>> {
+    let mut bits = Zeroizing::new(Vec::with_capacity(bytes.len() * 8));
     for &byte in bytes {
         for j in 0..8 {
             bits.push((byte >> j) & 1);

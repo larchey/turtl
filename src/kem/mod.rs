@@ -28,40 +28,33 @@
 //!
 //! # Security notes
 //!
-//! - **Zeroization**: private keys and shared secrets zeroize their byte buffers on drop.
-//!   Note that some intermediate secrets are not yet zeroized.
-//! - **Implicit rejection**: decapsulation selects the shared secret in constant time using
-//!   the `security::constant_time` primitives.
-//! - **Input validation**: key, ciphertext, and parameter-set lengths are checked.
+//! - **Input validation**: `PublicKey::new` applies the FIPS 203 modulus check and
+//!   `PrivateKey::new` the hash check; lengths are checked everywhere.
+//! - **Implicit rejection**: an invalid ciphertext yields a pseudorandom shared secret, selected
+//!   without branching, never an error.
+//! - **Side channels**: arithmetic on secret data is branch-free and division-free.
+//! - **Zeroization**: private keys, shared secrets and intermediate secrets are wiped on drop.
 //!
-//! This implementation is **not** hardened against timing/power side-channels beyond the
-//! selection primitives above, and has not had an independent audit — see
-//! `SECURITY_REVIEW_2026-07.md`. It is not yet suitable for protecting production data.
+//! See `SECURITY.md` for the assurance evidence and limitations.
 //!
 //! # Usage Example
 //!
 //! ```
-//! use turtl::kem::{ParameterSet};
+//! use turtl::kem::{decapsulate, encapsulate, KeyPair, ParameterSet};
 //!
-//! fn main() {
-//!     // Check security levels and parameter sizes
-//!     let param_set = ParameterSet::MlKem768;
-//!     
-//!     println!("ML-KEM-768 Parameters:");
-//!     println!("Security Category: {}", param_set.security_category());
-//!     println!("Matrix Dimension (k): {}", param_set.k());
-//!     println!("Public Key Size: {} bytes", param_set.public_key_size());
-//!     println!("Private Key Size: {} bytes", param_set.private_key_size());
-//!     println!("Ciphertext Size: {} bytes", param_set.ciphertext_size());
-//!     println!("Shared Secret Size: {} bytes", param_set.shared_secret_size());
-//! }
+//! # fn main() -> turtl::Result<()> {
+//! // Receiver generates a keypair and publishes the public key.
+//! let keypair = KeyPair::generate(ParameterSet::MlKem768)?;
+//!
+//! // Sender encapsulates a fresh shared secret to that public key.
+//! let (ciphertext, sender_secret) = encapsulate(&keypair.public_key())?;
+//!
+//! // Receiver recovers the same secret from the ciphertext.
+//! let receiver_secret = decapsulate(&keypair.private_key(), &ciphertext)?;
+//! assert_eq!(sender_secret, receiver_secret);
+//! # Ok(())
+//! # }
 //! ```
-//!
-//! # FIPS 203 Compliance
-//!
-//! This implementation adheres to the NIST FIPS 203 standard and includes all of the
-//! required features and parameter sets. Additionally, it includes security enhancements
-//! to protect against side-channel and fault attacks.
 
 use crate::error::{Error, Result};
 // Import only what we need
@@ -77,9 +70,6 @@ pub mod shell;
 pub use keypair::KeyPair;
 pub use params::ParameterSet;
 
-// Import ZeroizeParameterSet
-use params::ZeroizeParameterSet;
-
 /// ML-KEM public key (encapsulation key).
 ///
 /// This type represents a public key for the ML-KEM key encapsulation mechanism.
@@ -88,7 +78,6 @@ use params::ZeroizeParameterSet;
 ///
 /// # Security Features
 ///
-/// - Automatically zeroized on drop to prevent memory leakage
 /// - Immutable after creation to prevent accidental modification
 /// - Size validated during construction
 ///
@@ -111,18 +100,11 @@ pub struct PublicKey {
     bytes: Vec<u8>,
     /// Parameter set associated with this key
     parameter_set: ParameterSet,
-    // Add a ZeroizeParameterSet for zeroizing
-    #[doc(hidden)]
-    _zeroize_param: ZeroizeParameterSet,
 }
 
-// Manual implementation of Zeroize
 impl Zeroize for PublicKey {
     fn zeroize(&mut self) {
         self.bytes.zeroize();
-        // parameter_set doesn't need to be zeroized as it's Copy and doesn't contain secrets
-        // But _zeroize_param will be zeroized
-        self._zeroize_param.zeroize();
     }
 }
 
@@ -141,7 +123,8 @@ impl PublicKey {
     /// # Errors
     ///
     /// Returns `Error::InvalidPublicKey` if the byte length doesn't match the
-    /// expected size for the given parameter set.
+    /// expected size for the given parameter set, or if the key fails the FIPS 203
+    /// encapsulation-key modulus check (an encoded coefficient is not below q).
     ///
     /// # Example
     ///
@@ -161,10 +144,14 @@ impl PublicKey {
             return Err(Error::InvalidPublicKey);
         }
 
+        // FIPS 203 Section 7.2 input check: ByteEncode_12(ByteDecode_12(ek)) == ek.
+        if !internal::k_pke::encoded_coeffs_below_q(&bytes[..384 * parameter_set.k()]) {
+            return Err(Error::InvalidPublicKey);
+        }
+
         Ok(Self {
             bytes,
             parameter_set,
-            _zeroize_param: ZeroizeParameterSet(parameter_set),
         })
     }
 
@@ -206,8 +193,7 @@ impl PublicKey {
 ///
 /// # Security Features
 ///
-/// - Automatically zeroized on drop to prevent memory leakage
-/// - Implements `ZeroizeOnDrop` to ensure sensitive data is cleared
+/// - Zeroized on drop; `Debug` output is redacted
 /// - Immutable after creation to prevent accidental modification
 /// - Size validated during construction
 ///
@@ -225,29 +211,36 @@ impl PublicKey {
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct PrivateKey {
     /// Raw byte representation of the private key
     bytes: Vec<u8>,
     /// Parameter set associated with this key
     parameter_set: ParameterSet,
-    // Add a ZeroizeParameterSet for zeroizing
-    #[doc(hidden)]
-    _zeroize_param: ZeroizeParameterSet,
 }
 
-// Manual implementation of Zeroize
 impl Zeroize for PrivateKey {
     fn zeroize(&mut self) {
         self.bytes.zeroize();
-        // parameter_set doesn't need to be zeroized as it's Copy and doesn't contain secrets
-        // But _zeroize_param will be zeroized
-        self._zeroize_param.zeroize();
     }
 }
 
-// Implement ZeroizeOnDrop manually
 impl ZeroizeOnDrop for PrivateKey {}
+
+impl Drop for PrivateKey {
+    fn drop(&mut self) {
+        self.zeroize();
+    }
+}
+
+impl core::fmt::Debug for PrivateKey {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("PrivateKey")
+            .field("parameter_set", &self.parameter_set)
+            .field("bytes", &"<redacted>")
+            .finish()
+    }
+}
 
 impl PrivateKey {
     /// Create a new private key from raw bytes.
@@ -264,7 +257,8 @@ impl PrivateKey {
     /// # Errors
     ///
     /// Returns `Error::InvalidPrivateKey` if the byte length doesn't match the
-    /// expected size for the given parameter set.
+    /// expected size for the given parameter set, or if the key fails the FIPS 203
+    /// decapsulation-key hash check (the embedded `H(ek)` does not match `ek`).
     ///
     /// # Security
     ///
@@ -276,10 +270,17 @@ impl PrivateKey {
             return Err(Error::InvalidPrivateKey);
         }
 
+        // FIPS 203 Section 7.3 input check: H(dk[384k : 768k+32]) == dk[768k+32 : 768k+64].
+        let k = parameter_set.k();
+        let ek = &bytes[384 * k..768 * k + 32];
+        let h = &bytes[768 * k + 32..768 * k + 64];
+        if !crate::security::constant_time::ct_eq(&crate::common::hash::sha3_256(ek), h) {
+            return Err(Error::InvalidPrivateKey);
+        }
+
         Ok(Self {
             bytes,
             parameter_set,
-            _zeroize_param: ZeroizeParameterSet(parameter_set),
         })
     }
 
@@ -376,7 +377,6 @@ impl PrivateKey {
 ///
 /// # Security Features
 ///
-/// - Automatically zeroized on drop to prevent memory leakage
 /// - Immutable after creation
 /// - Size validated during construction
 ///
@@ -402,18 +402,11 @@ pub struct Ciphertext {
     bytes: Vec<u8>,
     /// Parameter set associated with this ciphertext
     parameter_set: ParameterSet,
-    // Add a ZeroizeParameterSet for zeroizing
-    #[doc(hidden)]
-    _zeroize_param: ZeroizeParameterSet,
 }
 
-// Manual implementation of Zeroize
 impl Zeroize for Ciphertext {
     fn zeroize(&mut self) {
         self.bytes.zeroize();
-        // parameter_set doesn't need to be zeroized as it's Copy and doesn't contain secrets
-        // But _zeroize_param will be zeroized
-        self._zeroize_param.zeroize();
     }
 }
 
@@ -443,7 +436,6 @@ impl Ciphertext {
         Ok(Self {
             bytes,
             parameter_set,
-            _zeroize_param: ZeroizeParameterSet(parameter_set),
         })
     }
 
@@ -471,8 +463,7 @@ impl Ciphertext {
 ///
 /// # Security Features
 ///
-/// - Automatically zeroized on drop to prevent memory leakage
-/// - Implements `ZeroizeOnDrop` to ensure sensitive data is cleared
+/// - Zeroized on drop; `Debug` output is redacted
 /// - Fixed size of 32 bytes for all ML-KEM parameter sets
 ///
 /// # Example
@@ -491,7 +482,7 @@ impl Ciphertext {
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone)]
 pub struct SharedSecret {
     /// Raw byte representation of the shared secret
     bytes: [u8; 32],
@@ -504,8 +495,31 @@ impl Zeroize for SharedSecret {
     }
 }
 
-// Implement ZeroizeOnDrop manually
 impl ZeroizeOnDrop for SharedSecret {}
+
+impl Drop for SharedSecret {
+    fn drop(&mut self) {
+        self.zeroize();
+    }
+}
+
+impl core::fmt::Debug for SharedSecret {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("SharedSecret")
+            .field("bytes", &"<redacted>")
+            .finish()
+    }
+}
+
+/// Constant-time equality: comparing shared secrets must not leak, through timing,
+/// how many leading bytes match.
+impl PartialEq for SharedSecret {
+    fn eq(&self, other: &Self) -> bool {
+        crate::security::constant_time::ct_eq(&self.bytes, &other.bytes)
+    }
+}
+
+impl Eq for SharedSecret {}
 
 impl SharedSecret {
     /// Create a new shared secret from raw bytes.
@@ -638,7 +652,7 @@ pub fn encapsulate(public_key: &PublicKey) -> Result<(Ciphertext, SharedSecret)>
 
 /// Encapsulate using a caller-supplied 32-byte message `m` instead of fresh
 /// randomness. This is the deterministic, KAT-reproducible entry point
-/// (FIPS 203 ML-KEM.Encaps_internal); for normal use call [`encapsulate`].
+/// (FIPS 203 ML-KEM.Encaps_internal); for normal use call [`encapsulate()`](fn@encapsulate).
 pub fn encapsulate_deterministic(
     public_key: &PublicKey,
     message: &[u8; 32],
@@ -692,7 +706,6 @@ pub fn encapsulate_deterministic(
 /// - Implements implicit rejection (FIPS 203 Section 7.3)
 /// - Invalid ciphertexts produce pseudorandom shared secrets instead of errors
 /// - The shared secret is automatically zeroized when dropped
-/// - Includes fault detection mechanisms to resist fault injection attacks
 ///
 /// # Reference
 ///
