@@ -4,9 +4,11 @@
 //! signing, and verification as specified in NIST FIPS 204.
 
 use crate::common::ntt::NTTType;
+use crate::common::reduce::{barrett_for, ct_mod, Q_DSA};
 use crate::common::{hash, ntt::NTTContext, poly::Polynomial};
 use crate::dsa::{HashFunction, ParameterSet, PrivateKey, PublicKey};
 use crate::error::{Error, Result};
+use zeroize::Zeroizing;
 
 /// Generate a keypair from a seed.
 pub(crate) fn seed_to_keypair(
@@ -24,6 +26,15 @@ pub(crate) fn seed_to_keypair(
     super::KeyPair::from_keys(public_key, private_key)
 }
 
+/// True if the private key decodes with every s1/s2 coefficient in [-η, η]
+/// (t0 is a 13-bit field, so every encoding is in range).
+pub(crate) fn private_key_is_well_formed(
+    private_key_bytes: &[u8],
+    parameter_set: ParameterSet,
+) -> bool {
+    decode_private_key(private_key_bytes, parameter_set).is_ok()
+}
+
 /// Implement ML-DSA key generation from seed
 pub(crate) fn ml_dsa_keygen_internal(
     seed: &[u8; 32],
@@ -38,14 +49,14 @@ pub(crate) fn ml_dsa_keygen_internal(
 
     // 1. Expand the seed to get rho, sigma, and K
     let domain_bytes = [k as u8, l as u8];
-    let mut data = Vec::with_capacity(seed.len() + domain_bytes.len());
+    let mut data = Zeroizing::new(Vec::with_capacity(seed.len() + domain_bytes.len()));
     data.extend_from_slice(seed);
     data.extend_from_slice(&domain_bytes);
-    let expanded = hash::h_function(&data, 128);
+    let expanded = Zeroizing::new(hash::h_function(&data, 128));
 
     let mut rho = [0u8; 32];
-    let mut sigma = [0u8; 64];
-    let mut key_seed = [0u8; 32];
+    let mut sigma = Zeroizing::new([0u8; 64]);
+    let mut key_seed = Zeroizing::new([0u8; 32]);
 
     rho.copy_from_slice(&expanded[0..32]);
     sigma.copy_from_slice(&expanded[32..96]);
@@ -54,7 +65,7 @@ pub(crate) fn ml_dsa_keygen_internal(
     // 2-4. Generate matrix A, vectors s1 and s2
     let ntt_ctx = NTTContext::new(NTTType::MLDSA);
     let matrix_a = expand_a(&rho, k, l)?;
-    let (s1, s2) = expand_s(&sigma, l, k, eta)?;
+    let (s1, s2) = expand_s(sigma.as_ref(), l, k, eta)?;
 
     // 5. Compute t = As1 + s2
     let t = compute_public_t(&matrix_a, &s1, &s2, &ntt_ctx)?;
@@ -79,6 +90,7 @@ pub(crate) fn ml_dsa_sign_internal(
 ) -> Result<Vec<u8>> {
     // Extract components from private key
     let (rho, key, tr, s1, s2, t0) = decode_private_key(private_key_bytes, parameter_set)?;
+    let key = Zeroizing::new(key);
 
     // Get parameters
     let (k, l) = parameter_set.dimensions();
@@ -119,11 +131,11 @@ pub(crate) fn ml_dsa_sign_internal(
     let mu = hash::h_function(&[&tr, message].concat(), 64);
 
     // Generate rho' = H(K || rnd || mu)
-    let mut rho_data = Vec::new();
+    let mut rho_data = Zeroizing::new(Vec::new());
     rho_data.extend_from_slice(&key);
     rho_data.extend_from_slice(rnd);
     rho_data.extend_from_slice(&mu);
-    let rho_prime = hash::h_function(&rho_data, 64);
+    let rho_prime = Zeroizing::new(hash::h_function(&rho_data, 64));
 
     // FIPS 204: kappa is the ExpandMask nonce base, incremented by l each
     // rejection iteration. A separate counter bounds the loop.
@@ -260,11 +272,13 @@ pub(crate) fn ml_dsa_sign_internal(
             h.push(h_i);
         }
 
-        // Count total number of 1's in hints
-        let ones_count = count_ones(&h);
+        // FIPS 204 Algorithm 7, line 28: reject if ||ct0||∞ >= γ2 or the hint
+        // has more than ω ones.
+        let ct0_too_big = ct0
+            .iter()
+            .any(|p| p.infinity_norm_centered(ntt_ctx.modulus) >= gamma2 as i32);
 
-        // Check if number of 1's is within limit
-        if ones_count > omega {
+        if ct0_too_big || count_ones(&h) > omega {
             kappa += l as u16;
             continue;
         }
@@ -293,8 +307,12 @@ pub(crate) fn ml_dsa_verify_internal(
     // Decode public key
     let (rho, t1) = decode_public_key(public_key_bytes, parameter_set)?;
 
-    // Decode signature
-    let (c_tilde, z, h) = decode_signature(signature_bytes, parameter_set)?;
+    // A signature that does not decode (e.g. malformed hint encoding) is simply
+    // invalid: FIPS 204 Algorithm 8 returns false rather than an error.
+    let (c_tilde, z, h) = match decode_signature(signature_bytes, parameter_set) {
+        Ok(parts) => parts,
+        Err(_) => return Ok(false),
+    };
 
     // Get parameters
     let (k, l) = parameter_set.dimensions();
@@ -309,28 +327,16 @@ pub(crate) fn ml_dsa_verify_internal(
         return Err(Error::InvalidSignature);
     }
 
-    // Check if z is small enough using explicit bounds checking
-    use crate::security::fault_detection;
-    for i in 0..l {
-        let norm = z[i].infinity_norm();
-
-        // Verify bounds for z values
-        fault_detection::verify_bounds(norm as usize, 0, gamma1 - beta - 1)
-            .map_err(|_| Error::InvalidSignature)?;
-
-        if norm >= (gamma1 - beta) as i32 {
+    // FIPS 204 Algorithm 8, line 13: reject if ||z||∞ >= γ1 - β.
+    for zi in &z {
+        if zi.infinity_norm() >= (gamma1 - beta) as i32 {
             return Ok(false);
         }
     }
 
-    // Validate that the hint vector has at most omega ones
-    let hint_ones = count_ones(&h);
-
-    // Additional bounds checking for hint
-    fault_detection::verify_bounds(hint_ones, 0, omega).map_err(|_| Error::InvalidSignature)?;
-
-    if hint_ones > omega {
-        return Err(Error::InvalidSignature);
+    // HintBitUnpack already bounds the hint weight by ω; keep the check explicit.
+    if count_ones(&h) > omega {
+        return Ok(false);
     }
 
     // Create NTT context
@@ -416,6 +422,46 @@ pub(crate) fn ml_dsa_verify_internal(
     Ok(c_tilde == c_prime)
 }
 
+/// Build the pure ML-DSA message M' = 0 || |ctx| || ctx || M
+/// (FIPS 204 Algorithm 2, line 10 / Algorithm 3, line 5).
+pub(crate) fn pure_message(message: &[u8], context: &[u8]) -> Result<Vec<u8>> {
+    if context.len() > 255 {
+        return Err(Error::ContextTooLong);
+    }
+
+    let mut m_prime = Vec::with_capacity(2 + context.len() + message.len());
+    m_prime.push(0u8); // domain separator for pure signing
+    m_prime.push(context.len() as u8);
+    m_prime.extend_from_slice(context);
+    m_prime.extend_from_slice(message);
+    Ok(m_prime)
+}
+
+/// Build the HashML-DSA message M' = 1 || |ctx| || ctx || OID(PH) || PH(M)
+/// (FIPS 204 Algorithm 4, lines 10-23).
+fn prehash_message(message: &[u8], context: &[u8], hash_function: HashFunction) -> Result<Vec<u8>> {
+    if context.len() > 255 {
+        return Err(Error::ContextTooLong);
+    }
+
+    let oid = get_hash_function_oid(hash_function);
+    let digest = match hash_function {
+        HashFunction::SHA3_256 => hash::sha3_256(message).to_vec(),
+        HashFunction::SHA3_512 => hash::sha3_512(message).to_vec(),
+        // FIPS 204: SHAKE128 with 256-bit output, SHAKE256 with 512-bit output.
+        HashFunction::SHAKE128 => hash::shake128(message, 32),
+        HashFunction::SHAKE256 => hash::shake256(message, 64),
+    };
+
+    let mut m_prime = Vec::with_capacity(2 + context.len() + oid.len() + digest.len());
+    m_prime.push(1u8); // domain separator for pre-hash
+    m_prime.push(context.len() as u8);
+    m_prime.extend_from_slice(context);
+    m_prime.extend_from_slice(&oid);
+    m_prime.extend_from_slice(&digest);
+    Ok(m_prime)
+}
+
 /// Internal function for ML-DSA hash-then-sign
 pub(crate) fn ml_dsa_hash_sign_internal(
     private_key_bytes: &[u8],
@@ -425,34 +471,8 @@ pub(crate) fn ml_dsa_hash_sign_internal(
     rnd: &[u8; 32],
     parameter_set: ParameterSet,
 ) -> Result<Vec<u8>> {
-    // Format with domain separator 1 (for pre-hash)
-    let domain_separator = 1u8;
-
-    // Create context header
-    let mut ctx_header = Vec::with_capacity(2 + context.len());
-    ctx_header.push(domain_separator);
-    ctx_header.push(context.len() as u8);
-    ctx_header.extend_from_slice(context);
-
-    // Get OID for hash function
-    let oid = get_hash_function_oid(hash_function);
-
-    // Compute hash of message
-    let message_hash = match hash_function {
-        HashFunction::SHA3_256 => hash::sha3_256(message).to_vec(),
-        HashFunction::SHA3_512 => hash::sha3_512(message).to_vec(),
-        HashFunction::SHAKE128 => hash::shake128(message, 32),
-        HashFunction::SHAKE256 => hash::shake256(message, 32),
-    };
-
-    // Create pre-hashed message
-    let mut pre_hashed = Vec::with_capacity(ctx_header.len() + oid.len() + message_hash.len());
-    pre_hashed.extend_from_slice(&ctx_header);
-    pre_hashed.extend_from_slice(&oid);
-    pre_hashed.extend_from_slice(&message_hash);
-
-    // Call internal signing function
-    ml_dsa_sign_internal(private_key_bytes, &pre_hashed, rnd, parameter_set)
+    let m_prime = prehash_message(message, context, hash_function)?;
+    ml_dsa_sign_internal(private_key_bytes, &m_prime, rnd, parameter_set)
 }
 
 /// Internal function for ML-DSA hash-then-verify
@@ -464,64 +484,8 @@ pub(crate) fn ml_dsa_hash_verify_internal(
     hash_function: HashFunction,
     parameter_set: ParameterSet,
 ) -> Result<bool> {
-    // Validate input parameters
-    if context.len() > 255 {
-        return Err(Error::ContextTooLong);
-    }
-
-    if public_key_bytes.len() != parameter_set.public_key_size() {
-        return Err(Error::InvalidPublicKey);
-    }
-
-    if signature_bytes.len() < parameter_set.lambda() / 4 {
-        return Err(Error::InvalidSignature);
-    }
-
-    // Format with domain separator 1 (for pre-hash)
-    let domain_separator = 1u8;
-
-    // Create context header
-    let mut ctx_header = Vec::with_capacity(2 + context.len());
-    ctx_header.push(domain_separator);
-    ctx_header.push(context.len() as u8);
-    ctx_header.extend_from_slice(context);
-
-    // Get OID for hash function
-    let oid = get_hash_function_oid(hash_function);
-
-    // Compute hash of message using the specified hash function
-    let message_hash = match hash_function {
-        HashFunction::SHA3_256 => hash::sha3_256(message).to_vec(),
-        HashFunction::SHA3_512 => hash::sha3_512(message).to_vec(),
-        HashFunction::SHAKE128 => hash::shake128(message, 32),
-        HashFunction::SHAKE256 => hash::shake256(message, 32),
-    };
-
-    // Verify the hash output is of the expected length
-    let expected_hash_length = match hash_function {
-        HashFunction::SHA3_256 => 32,
-        HashFunction::SHA3_512 => 64,
-        HashFunction::SHAKE128 => 32,
-        HashFunction::SHAKE256 => 32,
-    };
-
-    if message_hash.len() != expected_hash_length {
-        return Err(Error::RandomnessError);
-    }
-
-    // Create pre-hashed message
-    let mut pre_hashed = Vec::with_capacity(ctx_header.len() + oid.len() + message_hash.len());
-    pre_hashed.extend_from_slice(&ctx_header);
-    pre_hashed.extend_from_slice(&oid);
-    pre_hashed.extend_from_slice(&message_hash);
-
-    // Call internal verification function
-    ml_dsa_verify_internal(
-        public_key_bytes,
-        &pre_hashed,
-        signature_bytes,
-        parameter_set,
-    )
+    let m_prime = prehash_message(message, context, hash_function)?;
+    ml_dsa_verify_internal(public_key_bytes, &m_prime, signature_bytes, parameter_set)
 }
 
 // Utility functions
@@ -529,15 +493,19 @@ pub(crate) fn ml_dsa_hash_verify_internal(
 /// Get OID for hash function in DER encoding
 fn get_hash_function_oid(hash_function: HashFunction) -> Vec<u8> {
     match hash_function {
+        // id-sha3-256: 2.16.840.1.101.3.4.2.8
         HashFunction::SHA3_256 => vec![
-            0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x01,
+            0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x08,
         ],
+        // id-sha3-512: 2.16.840.1.101.3.4.2.10
         HashFunction::SHA3_512 => vec![
-            0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x03,
+            0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x0A,
         ],
+        // id-shake128: 2.16.840.1.101.3.4.2.11
         HashFunction::SHAKE128 => vec![
             0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x0B,
         ],
+        // id-shake256: 2.16.840.1.101.3.4.2.12
         HashFunction::SHAKE256 => vec![
             0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x0C,
         ],
@@ -614,11 +582,11 @@ fn expand_s(
     // FIPS 204 ExpandS: nonce is a 2-byte little-endian integer; s1 uses
     // nonces 0..l and s2 uses nonces l..l+k.
     for i in 0..l {
-        let seed = [sigma, &(i as u16).to_le_bytes()].concat();
+        let seed = Zeroizing::new([sigma, &(i as u16).to_le_bytes()].concat());
         s1.push(sample_bounded_poly(&seed, eta)?);
     }
     for i in 0..k {
-        let seed = [sigma, &((l + i) as u16).to_le_bytes()].concat();
+        let seed = Zeroizing::new([sigma, &((l + i) as u16).to_le_bytes()].concat());
         s2.push(sample_bounded_poly(&seed, eta)?);
     }
 
@@ -727,11 +695,9 @@ fn power2round(t: &[Polynomial], d: usize) -> Result<(Vec<Polynomial>, Vec<Polyn
         for j in 0..256 {
             // FIPS 204 Power2Round: r0 is the centered remainder mod 2^d, so
             // t1 = round(r / 2^d) rather than floor.
-            let r = t[i].coeffs[j].rem_euclid(q);
+            let r = ct_mod(t[i].coeffs[j] as i64, q, barrett_for(q));
             let mut r0 = r & (two_d - 1);
-            if r0 > two_d / 2 {
-                r0 -= two_d;
-            }
+            r0 -= two_d & ((two_d / 2 - r0) >> 31); // if r0 > 2^(d-1)
             t1_i.coeffs[j] = (r - r0) >> d;
             t0_i.coeffs[j] = r0;
         }
@@ -749,11 +715,12 @@ fn power2round(t: &[Polynomial], d: usize) -> Result<(Vec<Polynomial>, Vec<Polyn
 /// rejection sampling one byte at a time (j <= i), giving a byte-exact, unbiased
 /// mapping from c_tilde to the challenge polynomial.
 fn sample_in_ball(seed: &[u8], tau: usize) -> Result<Polynomial> {
-    use crate::security::fault_detection;
     let mut poly = Polynomial::new();
 
     // FIPS 204 uses tau <= 64 (fits within the 64 sign bits).
-    fault_detection::verify_bounds(tau, 1, 64).map_err(|_| Error::RandomnessError)?;
+    if !(1..=64).contains(&tau) {
+        return Err(Error::InvalidParameterSet);
+    }
 
     let mut ctx = hash::SHAKE256Context::init();
     ctx.absorb(seed);
@@ -785,7 +752,7 @@ fn expand_mask(rho_prime: &[u8], kappa: u16, l: usize, gamma1: usize) -> Result<
     // FIPS 204 ExpandMask: y[r] uses the 2-byte little-endian nonce (kappa + r).
     for r in 0..l {
         let nonce = kappa + r as u16;
-        let seed = [rho_prime, &nonce.to_le_bytes()].concat();
+        let seed = Zeroizing::new([rho_prime, &nonce.to_le_bytes()].concat());
         y.push(sample_uniform_poly(&seed, gamma1)?);
     }
 
@@ -876,26 +843,26 @@ fn decompose(poly: &Polynomial, gamma2: usize) -> Result<(Polynomial, Polynomial
 /// Includes the FIPS 204 special case: when r - r0 = q - 1, sets r1 = 0
 /// and r0 = r0 - 1 to keep r1 in the valid range [0, (q-1)/(2*alpha) - 1].
 fn decompose_coefficient(r: i32, alpha: usize) -> (i32, i32) {
-    let q: i64 = 8380417;
-    let two_alpha = (alpha as i64) * 2;
+    // Decompose (FIPS 204 Algorithm 36) without division or secret-dependent
+    // branches, following the pq-crystals reference implementation: the
+    // quotient by 2γ2 is a fixed-point multiply, and the q-1 wrap-around case
+    // and the centring of r0 are applied with masks.
+    const Q: i32 = Q_DSA;
+    let a = ct_mod(r as i64, Q, barrett_for(Q)); // [0, q)
 
-    // Ensure r is in [0, q-1]
-    let r_plus = ((r as i64 % q) + q) % q;
-
-    // Compute centered remainder: r0 = r mod± (2*alpha)
-    // Result in (-alpha, alpha] per FIPS 204 Section 2.4
-    let mut r0 = r_plus % two_alpha;
-    if r0 > alpha as i64 {
-        r0 -= two_alpha;
+    let mut a1 = (a + 127) >> 7;
+    if alpha == ((Q - 1) / 32) as usize {
+        a1 = (a1 * 1025 + (1 << 21)) >> 22;
+        a1 &= 15;
+    } else {
+        debug_assert_eq!(alpha, ((Q - 1) / 88) as usize);
+        a1 = (a1 * 11275 + (1 << 23)) >> 24;
+        a1 ^= ((43 - a1) >> 31) & a1;
     }
 
-    // FIPS 204 special case: when r - r0 = q - 1, wrap r1 to 0
-    if r_plus - r0 == q - 1 {
-        return (0, (r0 - 1) as i32);
-    }
-
-    let r1 = ((r_plus - r0) / two_alpha) as i32;
-    (r1, r0 as i32)
+    let mut a0 = a - a1 * 2 * alpha as i32;
+    a0 -= (((Q - 1) / 2 - a0) >> 31) & Q;
+    (a1, a0)
 }
 
 /// Make hint for high bits
@@ -904,7 +871,7 @@ fn decompose_coefficient(r: i32, alpha: usize) -> (i32, i32) {
 /// Returns 1 if HighBits(r, α) ≠ HighBits(r + z, α)
 fn make_hint(w_prime: &Polynomial, ct0: &Polynomial, gamma2: usize) -> Result<Polynomial> {
     let mut h = Polynomial::new();
-    let q = 8380417; // ML-DSA modulus
+    let q = Q_DSA;
 
     for i in 0..256 {
         // FIPS 204: MakeHint(z, r, α) checks if HighBits(r) ≠ HighBits(r + z)
@@ -914,14 +881,14 @@ fn make_hint(w_prime: &Polynomial, ct0: &Polynomial, gamma2: usize) -> Result<Po
         // Since we're passed ct₀ (not -ct₀), we compute:
         // r + z = w_prime + (-ct0) = w_prime - ct0
         let diff = w_prime.coeffs[i] as i64 - ct0.coeffs[i] as i64;
-        let r_plus_z = ((diff % q as i64) + q as i64) as i32 % q;
+        let r_plus_z = ct_mod(diff, q, barrett_for(q));
 
         // Decompose r and r + z to get high bits
         let (r1, _) = decompose_coefficient(w_prime.coeffs[i], gamma2);
         let (v1, _) = decompose_coefficient(r_plus_z, gamma2);
 
         // Set hint to 1 if high bits differ
-        h.coeffs[i] = if r1 != v1 { 1 } else { 0 };
+        h.coeffs[i] = (r1 != v1) as i32;
     }
 
     Ok(h)
@@ -1061,8 +1028,9 @@ fn encode_hint(h: &[Polynomial], omega: usize) -> Result<Vec<u8>> {
 }
 
 /// Convert a byte array to a bit array
-fn bytes_to_bits(bytes: &[u8]) -> Vec<u8> {
-    let mut bits = Vec::with_capacity(bytes.len() * 8);
+/// The buffer is wiped on drop: it often holds bits of secret coefficients.
+fn bytes_to_bits(bytes: &[u8]) -> Zeroizing<Vec<u8>> {
+    let mut bits = Zeroizing::new(Vec::with_capacity(bytes.len() * 8));
     for &byte in bytes {
         for j in 0..8 {
             bits.push((byte >> j) & 1);
@@ -1076,9 +1044,7 @@ fn count_ones(hint: &[Polynomial]) -> usize {
     let mut count = 0;
     for poly in hint {
         for &coeff in &poly.coeffs {
-            if coeff == 1 {
-                count += 1;
-            }
+            count += (coeff & 1) as usize;
         }
     }
     count
@@ -1138,19 +1104,19 @@ fn encode_private_key(
 
     // Encode s1
     for i in 0..l {
-        let encoded = encode_poly_signed(&s1[i], eta, eta)?;
+        let encoded = Zeroizing::new(encode_poly_signed(&s1[i], eta, eta)?);
         private_key.extend_from_slice(&encoded);
     }
 
     // Encode s2
     for i in 0..k {
-        let encoded = encode_poly_signed(&s2[i], eta, eta)?;
+        let encoded = Zeroizing::new(encode_poly_signed(&s2[i], eta, eta)?);
         private_key.extend_from_slice(&encoded);
     }
 
     // Encode t0
     for i in 0..k {
-        let encoded = encode_poly_signed(&t0[i], t0_a, t0_b)?;
+        let encoded = Zeroizing::new(encode_poly_signed(&t0[i], t0_a, t0_b)?);
         private_key.extend_from_slice(&encoded);
     }
 
@@ -1482,7 +1448,8 @@ fn decode_poly(bytes: &[u8], bits: usize, bound: u32) -> Result<Polynomial> {
 /// BitPack(w, a, b) stores (b - w_i) in bitlen(a+b) bits per coefficient.
 fn encode_poly_signed(poly: &Polynomial, a: usize, b: usize) -> Result<Vec<u8>> {
     let bits = bitlen((a + b) as u32);
-    let mut bits_array = Vec::with_capacity(256 * bits);
+    // Packs s1/s2/t0 during key generation: wipe the scratch bits.
+    let mut bits_array = Zeroizing::new(Vec::with_capacity(256 * bits));
 
     for i in 0..256 {
         // FIPS 204 BitPack stores b - w_i, which lies in [0, a+b] for w in [-a, b].
@@ -1636,6 +1603,114 @@ mod sib_tests {
             let got = sample_in_ball(&seed, tau).unwrap();
             let expected = ref_sample_in_ball(&seed, tau);
             assert_eq!(got.coeffs, expected, "mismatch for tau={tau}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod prehash_tests {
+    use super::*;
+
+    /// M' = 1 || |ctx| || ctx || DER(OID) || PH(M), with the NIST hashAlgs OIDs
+    /// (2.16.840.1.101.3.4.2.x) and FIPS 204 output lengths.
+    #[test]
+    fn prehash_message_layout() {
+        let msg = b"abc";
+        let ctx = b"ctx";
+        let cases = [
+            (HashFunction::SHA3_256, 0x08u8, hash::sha3_256(msg).to_vec()),
+            (HashFunction::SHA3_512, 0x0A, hash::sha3_512(msg).to_vec()),
+            (HashFunction::SHAKE128, 0x0B, hash::shake128(msg, 32)),
+            (HashFunction::SHAKE256, 0x0C, hash::shake256(msg, 64)),
+        ];
+        for (hf, last_arc, digest) in cases {
+            let m = prehash_message(msg, ctx, hf).unwrap();
+            let mut expected = vec![1u8, 3];
+            expected.extend_from_slice(ctx);
+            expected.extend_from_slice(&[
+                0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, last_arc,
+            ]);
+            expected.extend_from_slice(&digest);
+            assert_eq!(m, expected, "{hf:?}");
+        }
+    }
+
+    #[test]
+    fn prehash_rejects_long_context() {
+        assert!(matches!(
+            prehash_message(b"m", &[0u8; 256], HashFunction::SHAKE128),
+            Err(Error::ContextTooLong)
+        ));
+    }
+}
+
+#[cfg(test)]
+mod decompose_tests {
+    use super::*;
+
+    /// The straightforward (variable-time) FIPS 204 Decompose, used only to
+    /// check the constant-time version.
+    fn decompose_reference(r: i32, alpha: usize) -> (i32, i32) {
+        let q: i64 = 8380417;
+        let two_alpha = (alpha as i64) * 2;
+
+        // Ensure r is in [0, q-1]
+        let r_plus = ((r as i64 % q) + q) % q;
+
+        // Compute centered remainder: r0 = r mod± (2*alpha)
+        // Result in (-alpha, alpha] per FIPS 204 Section 2.4
+        let mut r0 = r_plus % two_alpha;
+        if r0 > alpha as i64 {
+            r0 -= two_alpha;
+        }
+
+        // FIPS 204 special case: when r - r0 = q - 1, wrap r1 to 0
+        if r_plus - r0 == q - 1 {
+            return (0, (r0 - 1) as i32);
+        }
+
+        let r1 = ((r_plus - r0) / two_alpha) as i32;
+        (r1, r0 as i32)
+    }
+
+    #[test]
+    fn decompose_matches_reference_for_every_input() {
+        for gamma2 in [(Q_DSA as usize - 1) / 88, (Q_DSA as usize - 1) / 32] {
+            for r in 0..Q_DSA {
+                assert_eq!(
+                    decompose_coefficient(r, gamma2),
+                    decompose_reference(r, gamma2),
+                    "r={r} gamma2={gamma2}"
+                );
+            }
+            for r in [-1, -Q_DSA + 1, Q_DSA, 2 * Q_DSA - 1] {
+                assert_eq!(
+                    decompose_coefficient(r, gamma2),
+                    decompose_reference(r, gamma2)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn power2round_matches_definition() {
+        let d = 13;
+        let mut t = Polynomial::new();
+        for (j, c) in t.coeffs.iter_mut().enumerate() {
+            *c = ((j as i64 * 32_771 + 5) % Q_DSA as i64) as i32;
+        }
+        t.coeffs[0] = Q_DSA - 1;
+        t.coeffs[1] = 4096;
+        t.coeffs[2] = 4097;
+        let (t1, t0) = power2round(&[t.clone()], d).unwrap();
+        for j in 0..256 {
+            let r = t.coeffs[j];
+            let mut r0 = r & ((1 << d) - 1);
+            if r0 > 1 << (d - 1) {
+                r0 -= 1 << d;
+            }
+            assert_eq!(t0[0].coeffs[j], r0);
+            assert_eq!(t1[0].coeffs[j], (r - r0) >> d);
         }
     }
 }
