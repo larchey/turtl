@@ -121,42 +121,85 @@ fn test_dsa_invalid_signature_size() {
     }
 }
 
-/// Test corrupted key data (all zeros)
+/// All-zero bytes: a valid encapsulation key encoding (every coefficient is 0),
+/// but not a valid decapsulation key (the embedded H(ek) does not match).
 #[test]
 fn test_all_zero_keys() {
-    // Keys that are all zeros are likely invalid
     let zero_pk = vec![0x00u8; 800];
     let zero_sk = vec![0x00u8; 1632];
 
-    let _pk_result = turtl::kem::PublicKey::new(zero_pk, KemParameterSet::MlKem512);
-    let _sk_result = turtl::kem::PrivateKey::new(zero_sk, KemParameterSet::MlKem512);
-
-    // All-zero keys might be accepted at construction but should fail in use
-    // This depends on whether validation happens at construction or use
+    assert!(turtl::kem::PublicKey::new(zero_pk, KemParameterSet::MlKem512).is_ok());
+    assert!(matches!(
+        turtl::kem::PrivateKey::new(zero_sk, KemParameterSet::MlKem512),
+        Err(Error::InvalidPrivateKey)
+    ));
 }
 
-/// Test corrupted key data (all ones)
+/// All-ones bytes decode to coefficients of 4095 >= q, so the FIPS 203 modulus
+/// check rejects the public key; the private key fails the hash check.
 #[test]
 fn test_all_ones_keys() {
-    // Keys that are all ones are likely invalid
     let ones_pk = vec![0xFFu8; 800];
     let ones_sk = vec![0xFFu8; 1632];
 
-    let _pk_result = turtl::kem::PublicKey::new(ones_pk, KemParameterSet::MlKem512);
-    let _sk_result = turtl::kem::PrivateKey::new(ones_sk, KemParameterSet::MlKem512);
+    assert!(matches!(
+        turtl::kem::PublicKey::new(ones_pk, KemParameterSet::MlKem512),
+        Err(Error::InvalidPublicKey)
+    ));
+    assert!(matches!(
+        turtl::kem::PrivateKey::new(ones_sk, KemParameterSet::MlKem512),
+        Err(Error::InvalidPrivateKey)
+    ));
+}
 
-    // All-ones keys might be accepted at construction
+/// FIPS 203 Section 7.2 modulus check: a single out-of-range coefficient in an
+/// otherwise valid public key must be rejected.
+#[test]
+fn test_kem_public_key_modulus_check() {
+    let kp = turtl::kem::KeyPair::from_seeds(&TEST_SEED_1, &TEST_SEED_2, KemParameterSet::MlKem768)
+        .unwrap();
+    let mut pk = kp.public_key().as_bytes().to_vec();
+    // First coefficient := 3329 (= q), encoded in the low 12 bits.
+    pk[0] = (3329 & 0xFF) as u8;
+    pk[1] = (pk[1] & 0xF0) | ((3329 >> 8) as u8);
+    assert!(matches!(
+        turtl::kem::PublicKey::new(pk, KemParameterSet::MlKem768),
+        Err(Error::InvalidPublicKey)
+    ));
+}
+
+/// FIPS 203 Section 7.3 hash check: tampering with the embedded public key or
+/// its hash inside a private key must be rejected.
+#[test]
+fn test_kem_private_key_hash_check() {
+    let kp = turtl::kem::KeyPair::from_seeds(&TEST_SEED_1, &TEST_SEED_2, KemParameterSet::MlKem768)
+        .unwrap();
+    let sk = kp.private_key().as_bytes().to_vec();
+    let k = 3;
+    for idx in [384 * k, 768 * k + 31, 768 * k + 32] {
+        let mut bad = sk.clone();
+        bad[idx] ^= 0x01;
+        assert!(
+            matches!(
+                turtl::kem::PrivateKey::new(bad, KemParameterSet::MlKem768),
+                Err(Error::InvalidPrivateKey)
+            ),
+            "tampered byte {idx} accepted"
+        );
+    }
+    assert!(turtl::kem::PrivateKey::new(sk, KemParameterSet::MlKem768).is_ok());
 }
 
 /// Test mismatched parameter sets
 #[test]
 fn test_mismatched_parameter_sets() {
     // Create keys with one parameter set
-    let pk_bytes_512 = vec![0x42u8; 800]; // ML-KEM-512 size
-    let sk_bytes_768 = vec![0x42u8; 2400]; // ML-KEM-768 size
-
-    let pk = turtl::kem::PublicKey::new(pk_bytes_512, KemParameterSet::MlKem512).unwrap();
-    let sk = turtl::kem::PrivateKey::new(sk_bytes_768, KemParameterSet::MlKem768).unwrap();
+    let pk = turtl::kem::KeyPair::from_seed(&TEST_SEED_1, KemParameterSet::MlKem512)
+        .unwrap()
+        .public_key();
+    let sk = turtl::kem::KeyPair::from_seed(&TEST_SEED_1, KemParameterSet::MlKem768)
+        .unwrap()
+        .private_key();
 
     // Trying to use mismatched keys should fail
     let result = turtl::kem::KeyPair::from_keys(pk, sk);
@@ -321,4 +364,73 @@ fn test_verify_corrupted_signature() {
     // Verification should fail
     let result = dsa::verify(&public_key, message, &corrupted_sig, b"").unwrap();
     assert!(!result, "Corrupted signature should not verify");
+}
+
+/// A signature whose hint encoding is malformed is invalid: verify must return
+/// `Ok(false)` (FIPS 204 Algorithm 8), not an error.
+#[test]
+fn test_verify_malformed_hint_returns_false() {
+    let keypair = DsaKeyPair::from_seed(&TEST_SEED_1, DsaParameterSet::MlDsa44).unwrap();
+    let signature = dsa::sign(
+        &keypair.private_key(),
+        b"msg",
+        b"",
+        SigningMode::Deterministic,
+    )
+    .unwrap();
+
+    // The last k bytes are cumulative hint counts; a count above omega is malformed.
+    let mut bytes = signature.as_bytes().to_vec();
+    let last = bytes.len() - 1;
+    bytes[last] = 0xFF;
+    let bad = turtl::dsa::Signature::new(bytes, DsaParameterSet::MlDsa44).unwrap();
+
+    assert!(!dsa::verify(&keypair.public_key(), b"msg", &bad, b"").unwrap());
+}
+
+/// Every pre-hash function round-trips through hash_sign / hash_verify, and a
+/// signature made under one pre-hash function does not verify under another.
+#[test]
+fn test_hash_sign_all_prehash_functions() {
+    use turtl::dsa::HashFunction;
+    let keypair = DsaKeyPair::from_seed(&TEST_SEED_2, DsaParameterSet::MlDsa65).unwrap();
+    let all = [
+        HashFunction::SHA3_256,
+        HashFunction::SHA3_512,
+        HashFunction::SHAKE128,
+        HashFunction::SHAKE256,
+    ];
+    for hf in all {
+        let sig = dsa::hash_sign(
+            &keypair.private_key(),
+            b"msg",
+            b"ctx",
+            hf,
+            SigningMode::Deterministic,
+        )
+        .unwrap();
+        for other in all {
+            let ok = dsa::hash_verify(&keypair.public_key(), b"msg", &sig, b"ctx", other).unwrap();
+            assert_eq!(
+                ok,
+                hf == other,
+                "signed with {hf:?}, verified with {other:?}"
+            );
+        }
+    }
+}
+
+/// A private key with s1 coefficients outside [-eta, eta] is malformed and is
+/// rejected when the key is constructed.
+#[test]
+fn test_dsa_malformed_private_key() {
+    let kp = DsaKeyPair::from_seed(&TEST_SEED_1, DsaParameterSet::MlDsa44).unwrap();
+    let mut sk = kp.private_key().as_bytes().to_vec();
+    // s1 starts after rho || K || tr (128 bytes); 3-bit fields, eta = 2.
+    // 0xFF packs the value 7, i.e. coefficient eta - 7 = -5.
+    sk[128] = 0xFF;
+    assert!(matches!(
+        turtl::dsa::PrivateKey::new(sk, DsaParameterSet::MlDsa44),
+        Err(Error::InvalidPrivateKey)
+    ));
 }

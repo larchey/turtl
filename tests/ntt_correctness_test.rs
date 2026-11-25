@@ -10,6 +10,9 @@
 //! - Bounds: Output coefficients in [0, q-1]
 //! - Known vectors: FIPS 203/204 test vectors (when available)
 
+// Index loops mirror the spec's coefficient-wise formulas.
+#![allow(clippy::needless_range_loop)]
+
 use turtl::common::ntt::{NTTContext, NTTType};
 use turtl::common::poly::Polynomial;
 
@@ -474,64 +477,6 @@ fn test_ntt_constant_polynomial() {
             ntt_type
         );
     }
-}
-
-// ============================================================================
-// KNOWN VECTOR TESTS (placeholders for FIPS test vectors)
-// ============================================================================
-
-/// Test NTT using FIPS 203 (ML-KEM) test vectors
-///
-/// TODO: Add FIPS 203 appendix test vectors when available
-/// Reference: FIPS 203, Appendix (Known Answer Tests)
-///
-/// To add vectors:
-/// 1. Download official KAT from NIST or pq-crystals repository
-/// 2. Parse the vector files to extract polynomial inputs/outputs
-/// 3. Add assertions comparing against reference values
-#[test]
-#[ignore] // Remove when test vectors are added
-fn test_ntt_fips203_vectors() {
-    // Placeholder for FIPS 203 test vectors
-    // Format:
-    // - Input polynomial (256 coefficients)
-    // - Expected NTT output (256 coefficients)
-    // - Expected inverse NTT output (should match input)
-
-    // Example structure (values are placeholders):
-    // let ctx = NTTContext::new(NTTType::MLKEM);
-    // for (input, expected_ntt) in test_vectors {
-    //     let mut poly = input.clone();
-    //     ctx.forward(&mut poly).unwrap();
-    //     assert_eq!(poly, expected_ntt);
-    // }
-}
-
-/// Test NTT using FIPS 204 (ML-DSA) test vectors
-///
-/// TODO: Add FIPS 204 appendix test vectors when available
-/// Reference: FIPS 204, Appendix (Known Answer Tests)
-///
-/// To add vectors:
-/// 1. Download official KAT from NIST or pq-crystals repository
-/// 2. Parse the vector files to extract polynomial inputs/outputs
-/// 3. Add assertions comparing against reference values
-#[test]
-#[ignore] // Remove when test vectors are added
-fn test_ntt_fips204_vectors() {
-    // Placeholder for FIPS 204 test vectors
-    // Format:
-    // - Input polynomial (256 coefficients)
-    // - Expected NTT output (256 coefficients)
-    // - Expected inverse NTT output (should match input)
-
-    // Example structure (values are placeholders):
-    // let ctx = NTTContext::new(NTTType::MLDSA);
-    // for (input, expected_ntt) in test_vectors {
-    //     let mut poly = input.clone();
-    //     ctx.forward(&mut poly).unwrap();
-    //     assert_eq!(poly, expected_ntt);
-    // }
 }
 
 // ============================================================================
