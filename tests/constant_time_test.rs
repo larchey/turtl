@@ -6,6 +6,7 @@
 //! specialized equipment.
 
 use turtl::security::constant_time;
+use turtl::security::constant_time::ct_eq;
 
 #[test]
 fn test_ct_cmov() {
@@ -380,3 +381,110 @@ fn test_ct_is_zero_u8() {
         "Max value should return false"
     );
 }
+
+// ---- slice equality (ct_eq) ----
+
+/// Test constant-time equality with matching values
+#[test]
+fn test_ct_eq_slice_matching() {
+    let a = vec![0x42u8; 32];
+    let b = vec![0x42u8; 32];
+
+    assert!(ct_eq(&a, &b), "Equal slices should return true");
+}
+
+/// Test constant-time equality with different values
+#[test]
+fn test_ct_eq_slice_different() {
+    let a = vec![0x42u8; 32];
+    let mut b = vec![0x42u8; 32];
+    b[0] = 0x43; // Single bit flip
+
+    assert!(!ct_eq(&a, &b), "Different slices should return false");
+}
+
+/// Test constant-time equality with different lengths
+#[test]
+fn test_ct_eq_slice_different_lengths() {
+    let a = vec![0x42u8; 32];
+    let b = vec![0x42u8; 16];
+
+    assert!(
+        !ct_eq(&a, &b),
+        "Different length slices should return false"
+    );
+}
+
+/// Test constant-time equality detects single bit flip
+#[test]
+fn test_ct_eq_slice_single_bit_flip() {
+    let a = vec![0x00u8; 32];
+    let mut b = vec![0x00u8; 32];
+
+    // Flip a single bit in the last byte
+    b[31] = 0x01;
+
+    assert!(!ct_eq(&a, &b), "Single bit flip should be detected");
+}
+
+/// Test constant-time equality with all-zero vs all-one
+#[test]
+fn test_ct_eq_slice_extremes() {
+    let zeros = vec![0x00u8; 32];
+    let ones = vec![0xFFu8; 32];
+
+    assert!(!ct_eq(&zeros, &ones), "All zeros != all ones");
+}
+
+/// Test fault detection with multiple bit flips
+#[test]
+fn test_ct_eq_slice_multiple_bit_flips() {
+    let a = vec![0xAAu8; 32]; // 10101010...
+    let mut b = vec![0xAAu8; 32];
+
+    // Flip multiple bits across different bytes
+    b[0] ^= 0x01; // Flip bit 0
+    b[15] ^= 0x80; // Flip bit 7
+    b[31] ^= 0x0F; // Flip bits 0-3
+
+    assert!(!ct_eq(&a, &b), "Multiple bit flips should be detected");
+}
+
+/// Test fault detection with adjacent byte corruption
+#[test]
+fn test_ct_eq_slice_adjacent_corruption() {
+    let a = vec![0x00u8; 32];
+    let mut b = vec![0x00u8; 32];
+
+    // Corrupt adjacent bytes (simulating burst errors)
+    b[10] = 0xFF;
+    b[11] = 0xFF;
+    b[12] = 0xFF;
+
+    assert!(
+        !ct_eq(&a, &b),
+        "Adjacent byte corruption should be detected"
+    );
+}
+
+/// Test that ct_eq handles empty slices
+#[test]
+fn test_ct_eq_slice_empty_slices() {
+    let a: Vec<u8> = vec![];
+    let b: Vec<u8> = vec![];
+
+    assert!(ct_eq(&a, &b), "Empty slices should be equal");
+}
+
+/// Test that ct_eq handles single-byte slices
+#[test]
+fn test_ct_eq_slice_single_byte() {
+    let a = vec![0x42u8];
+    let b = vec![0x42u8];
+    let c = vec![0x43u8];
+
+    assert!(ct_eq(&a, &b), "Matching single bytes should be equal");
+    assert!(!ct_eq(&a, &c), "Different single bytes should not be equal");
+}
+
+// Fault attack simulation test disabled - see note above

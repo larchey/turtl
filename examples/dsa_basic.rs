@@ -3,11 +3,6 @@
 //! This example demonstrates the basic usage of TURTL's ML-DSA (Digital Signature Algorithm)
 //! implementation, which provides post-quantum digital signatures according to NIST FIPS 204.
 //!
-//! # ⚠️ CURRENT STATUS
-//!
-//! **This example is currently blocked by a known critical bug in ML-DSA verification.**
-//! See TODO.md for details. The code is correct and will run successfully once the bug is fixed.
-//!
 //! # What This Example Demonstrates
 //!
 //! - Key generation for all three parameter sets (ML-DSA-44, ML-DSA-65, ML-DSA-87)
