@@ -6,8 +6,9 @@
 use crate::common::hash;
 use crate::error::{Error, Result};
 use crate::kem::{Ciphertext, ParameterSet, PrivateKey, PublicKey, SharedSecret};
+use zeroize::Zeroizing;
 
-pub mod aux;
+pub mod bits;
 pub mod k_pke;
 
 /// Generate a keypair from the two 32-byte seeds d and z (FIPS 203 KeyGen_internal).
@@ -34,10 +35,11 @@ pub(crate) fn ml_kem_keygen_internal(
     let k = parameter_set.k();
 
     // 1. (rho, sigma) = G(d || k), where G = SHA3-512.
-    let mut g_input = Vec::with_capacity(33);
+    let mut g_input = Zeroizing::new(Vec::with_capacity(33));
     g_input.extend_from_slice(d);
     g_input.push(k as u8);
     let (rho, sigma) = hash::g_function(&g_input);
+    let sigma = Zeroizing::new(sigma);
 
     // 2-4. Generate matrix A-hat, secret vector s, and error vector e
     let (matrix_a, s, e) = k_pke::generate_key_components(&rho, &sigma, parameter_set)?;
@@ -53,9 +55,9 @@ pub(crate) fn ml_kem_keygen_internal(
 
     // 9-10. Encode the private key: dk_pke || ek_pke || H(ek_pke) || z
     // where dk_pke = ByteEncode_12(s-hat) (NTT domain, FIPS 203)
-    let dk_pke = k_pke::encode_private_key_pke(&s_hat)?;
+    let dk_pke = Zeroizing::new(k_pke::encode_private_key_pke(&s_hat)?);
     let mut private_key_bytes = Vec::new();
-    private_key_bytes.extend(&dk_pke);
+    private_key_bytes.extend_from_slice(&dk_pke);
     private_key_bytes.extend(&public_key_bytes);
     private_key_bytes.extend(&tr);
     private_key_bytes.extend(z);
@@ -73,10 +75,11 @@ pub(crate) fn ml_kem_encaps_internal(
 
     // 1. Derive key K and randomness r from message and H(ek) = SHA3-256(ek)
     let public_key_hash = hash::sha3_256(public_key_bytes).to_vec();
-    let mut msg_data = Vec::with_capacity(message.len() + public_key_hash.len());
+    let mut msg_data = Zeroizing::new(Vec::with_capacity(message.len() + public_key_hash.len()));
     msg_data.extend_from_slice(message);
     msg_data.extend_from_slice(&public_key_hash);
     let (k, r) = hash::g_function(&msg_data);
+    let r = Zeroizing::new(r);
 
     // 2. Encrypt message using PKE with derived randomness
     let ciphertext = k_pke::encrypt(public_key_bytes, message, &r, parameter_set)?;
@@ -96,27 +99,29 @@ pub(crate) fn ml_kem_decaps_internal(
     let (dk_pke, ek_pke, h, z) = k_pke::decode_private_key(private_key_bytes, parameter_set)?;
 
     // 5. Decrypt the ciphertext
-    let m_prime = k_pke::decrypt(&dk_pke, ciphertext, parameter_set)?;
+    let m_prime = Zeroizing::new(k_pke::decrypt(&dk_pke, ciphertext, parameter_set)?);
 
     // 6. Re-derive K' and r'
-    let mut prime_data = Vec::with_capacity(m_prime.len() + h.len());
-    prime_data.extend_from_slice(&m_prime);
+    let mut prime_data = Zeroizing::new(Vec::with_capacity(m_prime.len() + h.len()));
+    prime_data.extend_from_slice(m_prime.as_ref());
     prime_data.extend_from_slice(&h);
     let (k_prime, r_prime) = hash::g_function(&prime_data);
+    let (k_prime, r_prime) = (Zeroizing::new(k_prime), Zeroizing::new(r_prime));
 
     // 7-8. Alternative K in case of failure
-    let k_bar = hash::h_function(&[&z, ciphertext].concat(), 32);
+    let mut z_ct = Zeroizing::new(Vec::with_capacity(32 + ciphertext.len()));
+    z_ct.extend_from_slice(z.as_ref());
+    z_ct.extend_from_slice(ciphertext);
+    let k_bar = Zeroizing::new(hash::h_function(&z_ct, 32));
 
     // 9. Re-encrypt using derived randomness
-    let c_prime = k_pke::encrypt(&ek_pke, &m_prime, &r_prime, parameter_set)?;
+    let c_prime = Zeroizing::new(k_pke::encrypt(&ek_pke, &m_prime, &r_prime, parameter_set)?);
 
     // 10-11. Select K' if the ciphertext re-encrypts correctly, else the
     // implicit-rejection value K_bar — in constant time.
     use crate::security::constant_time;
-    use crate::security::fault_detection;
 
-    let is_equal =
-        ciphertext.len() == c_prime.len() && fault_detection::ct_eq(ciphertext, &c_prime);
+    let is_equal = constant_time::ct_eq(ciphertext, &c_prime);
 
     let mut k = [0u8; 32];
     for i in 0..32 {
@@ -129,8 +134,8 @@ pub(crate) fn ml_kem_decaps_internal(
 pub(crate) fn encapsulate_internal(public_key: &PublicKey) -> Result<(Ciphertext, SharedSecret)> {
     // Generate a random 32-byte message
     use rand::{rngs::OsRng, RngCore};
-    let mut m = [0u8; 32];
-    OsRng.fill_bytes(&mut m);
+    let mut m = Zeroizing::new([0u8; 32]);
+    OsRng.fill_bytes(m.as_mut());
 
     encapsulate_deterministic_internal(public_key, &m)
 }

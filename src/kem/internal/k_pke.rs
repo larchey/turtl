@@ -4,11 +4,13 @@
 //! used as a component within ML-KEM, following FIPS 203 Algorithms 12-14.
 
 use crate::common::ntt::NTTType;
+use crate::common::reduce::{barrett_for, ct_mod, Q_KEM};
 use crate::common::{ntt::NTTContext, poly::Polynomial};
 use crate::error::{Error, Result};
 use crate::kem::ParameterSet;
+use zeroize::Zeroizing;
 
-use super::aux;
+use super::bits;
 
 /// Generate the key components for K-PKE (FIPS 203 Algorithm 12)
 ///
@@ -22,30 +24,15 @@ pub(crate) fn generate_key_components(
     let k = parameter_set.k();
     let eta1 = parameter_set.eta1();
 
-    // Create NTT context
-    let ntt_ctx = NTTContext::new(NTTType::MLKEM);
-
-    // Generate matrix A (already in NTT domain per FIPS 203 Section 4.2)
-    let mut matrix_a = Vec::with_capacity(k);
-    for i in 0..k {
-        let mut row = Vec::with_capacity(k);
-        for j in 0..k {
-            let mut seed = Vec::with_capacity(rho.len() + 2);
-            seed.extend_from_slice(rho);
-            seed.push(j as u8);
-            seed.push(i as u8);
-            let a_ij = reject_sample_ntt(&seed, &ntt_ctx)?;
-            row.push(a_ij);
-        }
-        matrix_a.push(row);
-    }
+    // Generate matrix A-hat (sampled directly in the NTT domain, FIPS 203 Section 4.2)
+    let matrix_a = expand_a(rho, k)?;
 
     // Generate secret vector s (FIPS 203 calls this s)
     let mut s = Vec::with_capacity(k);
     let mut counter = 0u8;
 
     for _i in 0..k {
-        let mut seed = Vec::with_capacity(sigma.len() + 1);
+        let mut seed = Zeroizing::new(Vec::with_capacity(sigma.len() + 1));
         seed.extend_from_slice(sigma);
         seed.push(counter);
         counter += 1;
@@ -56,7 +43,7 @@ pub(crate) fn generate_key_components(
     // Generate error vector e (FIPS 203 calls this e)
     let mut e = Vec::with_capacity(k);
     for _i in 0..k {
-        let mut seed = Vec::with_capacity(sigma.len() + 1);
+        let mut seed = Zeroizing::new(Vec::with_capacity(sigma.len() + 1));
         seed.extend_from_slice(sigma);
         seed.push(counter);
         counter += 1;
@@ -153,11 +140,25 @@ pub(crate) fn encode_private_key_pke(s: &[Polynomial]) -> Result<Vec<u8>> {
 
     // Add ByteEncode_12(s) for each polynomial
     for i in 0..k {
-        let encoded = byte_encode_12(&s[i])?;
-        private_key.extend(encoded);
+        let encoded = Zeroizing::new(byte_encode_12(&s[i])?);
+        private_key.extend_from_slice(&encoded);
     }
 
     Ok(private_key)
+}
+
+/// Returns true if every 12-bit little-endian value packed in `bytes` is below q.
+///
+/// This is the FIPS 203 encapsulation-key modulus check: it holds exactly when
+/// `ByteEncode_12(ByteDecode_12(bytes)) == bytes`.
+pub(crate) fn encoded_coeffs_below_q(bytes: &[u8]) -> bool {
+    let (chunks, rest) = bytes.as_chunks::<3>();
+    rest.is_empty()
+        && chunks.iter().all(|c| {
+            let d1 = (c[0] as u16) | ((c[1] as u16 & 0x0F) << 8);
+            let d2 = ((c[1] as u16) >> 4) | ((c[2] as u16) << 4);
+            d1 < 3329 && d2 < 3329
+        })
 }
 
 /// Decode the public key
@@ -195,7 +196,7 @@ pub(crate) fn decode_public_key(
 pub(crate) fn decode_private_key(
     private_key: &[u8],
     parameter_set: ParameterSet,
-) -> Result<(Vec<u8>, Vec<u8>, [u8; 32], [u8; 32])> {
+) -> Result<(Zeroizing<Vec<u8>>, Vec<u8>, [u8; 32], Zeroizing<[u8; 32]>)> {
     let k = parameter_set.k();
     let dk_pke_size = k * 384;
     let ek_pke_size = parameter_set.public_key_size();
@@ -209,13 +210,13 @@ pub(crate) fn decode_private_key(
     }
 
     // Extract components
-    let dk_pke = private_key[0..dk_pke_size].to_vec();
+    let dk_pke = Zeroizing::new(private_key[0..dk_pke_size].to_vec());
     let ek_pke = private_key[dk_pke_size..dk_pke_size + ek_pke_size].to_vec();
 
     let mut h = [0u8; 32];
     h.copy_from_slice(&private_key[dk_pke_size + ek_pke_size..dk_pke_size + ek_pke_size + 32]);
 
-    let mut z = [0u8; 32];
+    let mut z = Zeroizing::new([0u8; 32]);
     z.copy_from_slice(&private_key[dk_pke_size + ek_pke_size + 32..dk_pke_size + ek_pke_size + 64]);
 
     Ok((dk_pke, ek_pke, h, z))
@@ -268,7 +269,7 @@ pub(crate) fn encrypt(
     // Sample vector r from CBD_η1
     let mut r = Vec::with_capacity(k);
     for _i in 0..k {
-        let mut seed = Vec::with_capacity(randomness.len() + 1);
+        let mut seed = Zeroizing::new(Vec::with_capacity(randomness.len() + 1));
         seed.extend_from_slice(randomness);
         seed.push(counter);
         counter += 1;
@@ -279,7 +280,7 @@ pub(crate) fn encrypt(
     // Sample vector e1 from CBD_η2
     let mut e1 = Vec::with_capacity(k);
     for _i in 0..k {
-        let mut seed = Vec::with_capacity(randomness.len() + 1);
+        let mut seed = Zeroizing::new(Vec::with_capacity(randomness.len() + 1));
         seed.extend_from_slice(randomness);
         seed.push(counter);
         counter += 1;
@@ -288,7 +289,7 @@ pub(crate) fn encrypt(
     }
 
     // Sample e2 from CBD_η2
-    let mut seed = Vec::with_capacity(randomness.len() + 1);
+    let mut seed = Zeroizing::new(Vec::with_capacity(randomness.len() + 1));
     seed.extend_from_slice(randomness);
     seed.push(counter);
     let e2 = sample_cbd(seed.as_slice(), eta2)?;
@@ -397,7 +398,7 @@ pub(crate) fn decrypt(
     }
 
     // Compress and encode message
-    let m = byte_encode1(compress1(w)?)?;
+    let m = Zeroizing::new(byte_encode1(compress1(w)?)?);
 
     let mut result = [0u8; 32];
     result.copy_from_slice(&m);
@@ -462,11 +463,11 @@ fn sample_cbd(seed: &[u8], eta: usize) -> Result<Polynomial> {
 
     // We need 256 coefficients, each requiring 2*eta bits
     let required_bytes = (256 * 2 * eta).div_ceil(8);
-    let mut expanded_seed = vec![0u8; required_bytes];
+    let mut expanded_seed = Zeroizing::new(vec![0u8; required_bytes]);
     reader.read(&mut expanded_seed);
 
     // Convert to bits
-    let bits = aux::bytes_to_bits(&expanded_seed);
+    let bits = bits::bytes_to_bits(&expanded_seed);
 
     // Sample each coefficient
     for i in 0..256 {
@@ -521,23 +522,12 @@ fn byte_encode_12(poly: &Polynomial) -> Result<Vec<u8>> {
     let mut result = vec![0u8; 384]; // 256 coefficients * 12 bits / 8 = 384 bytes
 
     let bits_per_coeff = 12;
-    let mut bits = Vec::with_capacity(256 * bits_per_coeff);
+    // Encodes the secret s-hat during key generation: wipe the scratch bits,
+    // and reduce without branching.
+    let mut bits = Zeroizing::new(Vec::with_capacity(256 * bits_per_coeff));
 
     for i in 0..256 {
-        let mut coeff = poly.coeffs[i];
-
-        // Ensure coefficient is in [0, q-1]
-        if coeff < 0 {
-            coeff += 3329;
-        }
-        coeff = coeff.rem_euclid(3329);
-
-        if !(0..3329).contains(&coeff) {
-            return Err(Error::EncodingError(format!(
-                "Coefficient out of range: {}",
-                coeff
-            )));
-        }
+        let coeff = ct_mod(poly.coeffs[i] as i64, Q_KEM, barrett_for(Q_KEM));
 
         // Store coefficient in 12 bits (little-endian)
         for j in 0..bits_per_coeff {
@@ -570,7 +560,7 @@ fn byte_decode_12(bytes: &[u8]) -> Result<Polynomial> {
     }
 
     // Convert bytes to bits
-    let bits = aux::bytes_to_bits(&bytes[0..384]);
+    let bits = bits::bytes_to_bits(&bytes[0..384]);
 
     let mut poly = Polynomial::new();
     let bits_per_coeff = 12;
@@ -604,7 +594,7 @@ fn byte_decode_12(bytes: &[u8]) -> Result<Polynomial> {
 
 /// Generic byte encoding (FIPS 203 Algorithm 4)
 fn byte_encode(poly: &Polynomial, bound: u32) -> Result<Vec<u8>> {
-    let bits_per_coeff = aux::ceil_log2(bound + 1);
+    let bits_per_coeff = bits::ceil_log2(bound + 1);
     let bytes_needed = (256 * bits_per_coeff as usize).div_ceil(8);
     let mut result = vec![0u8; bytes_needed];
 
@@ -639,7 +629,7 @@ fn byte_encode(poly: &Polynomial, bound: u32) -> Result<Vec<u8>> {
 
 /// Generic byte decoding (FIPS 203 Algorithm 5)
 fn byte_decode(bytes: &[u8], bound: u32) -> Result<Polynomial> {
-    let bits_per_coeff = aux::ceil_log2(bound + 1);
+    let bits_per_coeff = bits::ceil_log2(bound + 1);
     let bytes_needed = (256 * bits_per_coeff as usize).div_ceil(8);
 
     if bytes.len() < bytes_needed {
@@ -650,7 +640,7 @@ fn byte_decode(bytes: &[u8], bound: u32) -> Result<Polynomial> {
         )));
     }
 
-    let bits = aux::bytes_to_bits(&bytes[0..bytes_needed]);
+    let bits = bits::bytes_to_bits(&bytes[0..bytes_needed]);
     let mut poly = Polynomial::new();
 
     for i in 0..256 {
@@ -694,7 +684,7 @@ fn byte_encode_vector(polys: &[Polynomial], bound: usize) -> Result<Vec<u8>> {
 
 /// Decode a vector of polynomials
 fn byte_decode_vector(bytes: &[u8], bound: usize) -> Result<Vec<Polynomial>> {
-    let bits_per_coeff = aux::ceil_log2(bound as u32 + 1);
+    let bits_per_coeff = bits::ceil_log2(bound as u32 + 1);
     let bytes_per_poly = (256 * bits_per_coeff as usize).div_ceil(8);
 
     if !bytes.len().is_multiple_of(bytes_per_poly) {
@@ -715,28 +705,29 @@ fn byte_decode_vector(bytes: &[u8], bound: usize) -> Result<Vec<Polynomial>> {
     Ok(result)
 }
 
-/// Encode message (d = 1)
+/// Encode message (d = 1).
+///
+/// The coefficients are bits of the decrypted message m', which is secret, so
+/// packing is branch-free; the range check is accumulated and tested once.
 fn byte_encode1(poly: Polynomial) -> Result<Vec<u8>> {
     let mut result = vec![0u8; 32]; // 256 bits = 32 bytes
+    let mut out_of_range = 0i32;
 
     for i in 0..256 {
         let coeff = poly.coeffs[i];
-        if coeff != 0 && coeff != 1 {
-            return Err(Error::EncodingError(format!(
-                "Coefficient out of range for d=1: {}",
-                coeff
-            )));
-        }
-
-        if coeff == 1 {
-            result[i / 8] |= 1 << (i % 8);
-        }
+        out_of_range |= coeff & !1;
+        result[i / 8] |= ((coeff & 1) as u8) << (i % 8);
     }
 
+    if out_of_range != 0 {
+        return Err(Error::EncodingError(
+            "Coefficient out of range for d=1".to_string(),
+        ));
+    }
     Ok(result)
 }
 
-/// Decode message (d = 1)
+/// Decode message (d = 1). Branch-free: the bits are the secret message m'.
 fn byte_decode1(bytes: &[u8]) -> Result<Polynomial> {
     if bytes.len() < 32 {
         return Err(Error::EncodingError(format!(
@@ -746,13 +737,8 @@ fn byte_decode1(bytes: &[u8]) -> Result<Polynomial> {
     }
 
     let mut poly = Polynomial::new();
-
     for i in 0..256 {
-        if (bytes[i / 8] >> (i % 8)) & 1 == 1 {
-            poly.coeffs[i] = 1;
-        } else {
-            poly.coeffs[i] = 0;
-        }
+        poly.coeffs[i] = ((bytes[i / 8] >> (i % 8)) & 1) as i32;
     }
 
     Ok(poly)
@@ -768,11 +754,15 @@ fn compress(poly: &Polynomial, d: usize) -> Result<Polynomial> {
     for i in 0..256 {
         let value = poly.coeffs[i];
         // Ensure value is in [0, q)
-        let normalized = value.rem_euclid(q);
+        let normalized = ct_mod(value as i64, q, barrett_for(q));
 
-        // Compress_d(x) = ⌈(2^d/q) · x⌋ mod 2^d
-        let compressed =
-            ((((1 << d) as i64 * normalized as i64) + (q / 2) as i64) / q as i64) % (1 << d) as i64;
+        // Compress_d(x) = ⌈(2^d/q) · x⌋ mod 2^d.
+        // The division by q is done as a multiply-and-shift so no variable-time
+        // divide instruction ever sees secret data (cf. KyberSlash). The
+        // constant is ⌈2^40 / q⌉; the result is exact for every x < q, d <= 11.
+        const Q_RECIP_40: u64 = 330_282_857;
+        let n = ((normalized as u64) << d) + (q as u64 / 2);
+        let compressed = ((n * Q_RECIP_40) >> 40) & ((1u64 << d) - 1);
         result.coeffs[i] = compressed as i32;
     }
 

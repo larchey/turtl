@@ -9,9 +9,6 @@
 //! Three parameter sets are defined (ML-KEM-512, ML-KEM-768, ML-KEM-1024)
 //! with different security levels and parameters.
 
-// We'll bring in Copy, Default, and Sized which ParameterSet already implements
-use zeroize::Zeroize;
-
 /// ML-KEM parameter sets as defined in FIPS 203.
 ///
 /// Each parameter set provides a different security level and has different key,
@@ -102,17 +99,6 @@ pub enum ParameterSet {
     ///
     /// FIPS 203 Table 2
     MlKem1024,
-}
-
-// Create a newtype wrapper for ParameterSet to avoid the conflicting impl
-// of Zeroize for types that implement DefaultIsZeroes
-#[derive(Clone, Copy, Debug, Default)]
-pub struct ZeroizeParameterSet(pub ParameterSet);
-
-impl Zeroize for ZeroizeParameterSet {
-    fn zeroize(&mut self) {
-        self.0 = ParameterSet::default();
-    }
 }
 
 impl ParameterSet {
@@ -254,51 +240,5 @@ impl ParameterSet {
             Self::MlKem768 => 192,
             Self::MlKem1024 => 256,
         }
-    }
-
-    /// Validate that the parameter set is consistent with FIPS 203
-    pub fn validate(&self) -> Result<(), &'static str> {
-        // These checks are redundant since we're using an enum with fixed values,
-        // but they illustrate the validation that would be done in a more flexible implementation
-
-        // Check polynomial degree
-        if self.n() != 256 {
-            return Err("Invalid polynomial degree n (must be 256)");
-        }
-
-        // Check modulus
-        if self.q() != 3329 {
-            return Err("Invalid modulus q (must be 3329)");
-        }
-
-        // Check k parameter
-        let k = self.k();
-        if !(2..=4).contains(&k) {
-            return Err("Invalid k parameter (must be 2, 3, or 4)");
-        }
-
-        // Check eta parameters
-        let eta1 = self.eta1();
-        if !matches!(eta1, 2 | 3) {
-            return Err("Invalid eta1 parameter (must be 2 or 3)");
-        }
-
-        let eta2 = self.eta2();
-        if eta2 != 2 {
-            return Err("Invalid eta2 parameter (must be 2)");
-        }
-
-        // Check compression parameters
-        let du = self.du();
-        if !matches!(du, 10 | 11) {
-            return Err("Invalid du parameter (must be 10 or 11)");
-        }
-
-        let dv = self.dv();
-        if !matches!(dv, 4 | 5) {
-            return Err("Invalid dv parameter (must be 4 or 5)");
-        }
-
-        Ok(())
     }
 }

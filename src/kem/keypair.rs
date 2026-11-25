@@ -6,6 +6,7 @@ use super::internal::seed_to_keypair;
 use super::{ParameterSet, PrivateKey, PublicKey};
 use crate::error::{Error, Result};
 use rand::{rngs::OsRng, CryptoRng, RngCore};
+use zeroize::Zeroizing;
 
 /// ML-KEM key pair
 #[derive(Clone, Debug)]
@@ -47,12 +48,10 @@ impl KeyPair {
     /// For NIST-vector reproduction use [`KeyPair::from_seeds`] with independent
     /// `d` and `z`.
     pub fn from_seed(seed: &[u8], parameter_set: ParameterSet) -> Result<Self> {
-        if seed.len() != 32 {
-            return Err(Error::InvalidParameterSet);
-        }
-
-        let mut seed_array = [0u8; 32];
-        seed_array.copy_from_slice(seed);
+        let seed_array: Zeroizing<[u8; 32]> = Zeroizing::new(
+            seed.try_into()
+                .map_err(|_| Error::InvalidParameter("seed must be exactly 32 bytes".into()))?,
+        );
 
         seed_to_keypair(&seed_array, &seed_array, parameter_set)
     }
@@ -84,10 +83,10 @@ where
     R: RngCore + CryptoRng,
 {
     // FIPS 203 KeyGen draws two independent 32-byte seeds d and z.
-    let mut d = [0u8; 32];
-    let mut z = [0u8; 32];
-    rng.fill_bytes(&mut d);
-    rng.fill_bytes(&mut z);
+    let mut d = Zeroizing::new([0u8; 32]);
+    let mut z = Zeroizing::new([0u8; 32]);
+    rng.fill_bytes(d.as_mut());
+    rng.fill_bytes(z.as_mut());
 
     seed_to_keypair(&d, &z, parameter_set)
 }
