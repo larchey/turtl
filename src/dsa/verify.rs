@@ -2,7 +2,7 @@
 //!
 //! This module implements the verification algorithms for ML-DSA.
 
-use super::internal::{ml_dsa_hash_verify_internal, ml_dsa_verify_internal};
+use super::internal::{ml_dsa_hash_verify_internal, ml_dsa_verify_internal, pure_message};
 use super::{HashFunction, PublicKey, Signature};
 use crate::error::{Error, Result};
 
@@ -13,20 +13,12 @@ pub fn verify(
     signature: &Signature,
     context: &[u8],
 ) -> Result<bool> {
-    // Check if context is valid (max 255 bytes)
-    if context.len() > 255 {
-        return Err(Error::ContextTooLong);
-    }
-
     // Check that the parameter sets match
     if public_key.parameter_set() != signature.parameter_set() {
         return Err(Error::InvalidParameterSet);
     }
 
-    // Format message with domain separator and context
-    // Domain separator 0 for regular signing
-    let domain_separator = 0u8;
-    let formatted_message = format_message(message, context, domain_separator)?;
+    let formatted_message = pure_message(message, context)?;
 
     ml_dsa_verify_internal(
         public_key.as_bytes(),
@@ -44,11 +36,6 @@ pub fn hash_verify(
     context: &[u8],
     hash_function: HashFunction,
 ) -> Result<bool> {
-    // Check if context is valid (max 255 bytes)
-    if context.len() > 255 {
-        return Err(Error::ContextTooLong);
-    }
-
     // Check that the parameter sets match
     if public_key.parameter_set() != signature.parameter_set() {
         return Err(Error::InvalidParameterSet);
@@ -62,25 +49,6 @@ pub fn hash_verify(
         hash_function,
         public_key.parameter_set(),
     )
-}
-
-/// Format message with domain separator and context
-fn format_message(message: &[u8], context: &[u8], domain_separator: u8) -> Result<Vec<u8>> {
-    let mut formatted = Vec::with_capacity(2 + context.len() + message.len());
-
-    // Add domain separator
-    formatted.push(domain_separator);
-
-    // Add context length
-    formatted.push(context.len() as u8);
-
-    // Add context
-    formatted.extend_from_slice(context);
-
-    // Add message
-    formatted.extend_from_slice(message);
-
-    Ok(formatted)
 }
 
 #[cfg(test)]

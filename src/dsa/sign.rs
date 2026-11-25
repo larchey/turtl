@@ -2,10 +2,11 @@
 //!
 //! This module implements the signing algorithms for ML-DSA.
 
-use super::internal::{ml_dsa_hash_sign_internal, ml_dsa_sign_internal};
+use super::internal::{ml_dsa_hash_sign_internal, ml_dsa_sign_internal, pure_message};
 use super::{HashFunction, PrivateKey, Signature, SigningMode};
-use crate::error::{Error, Result};
+use crate::error::Result;
 use rand::{rngs::OsRng, RngCore};
+use zeroize::Zeroizing;
 
 /// Sign a message using ML-DSA
 pub fn sign(
@@ -14,21 +15,13 @@ pub fn sign(
     context: &[u8],
     mode: SigningMode,
 ) -> Result<Signature> {
-    // Check if context is valid (max 255 bytes)
-    if context.len() > 255 {
-        return Err(Error::ContextTooLong);
-    }
-
     // Generate randomness for hedged mode or use zeros for deterministic mode
-    let mut rnd = [0u8; 32];
+    let mut rnd = Zeroizing::new([0u8; 32]);
     if let SigningMode::Hedged = mode {
-        OsRng.fill_bytes(&mut rnd);
+        OsRng.fill_bytes(rnd.as_mut());
     }
 
-    // Format message with domain separator and context
-    // Domain separator 0 for regular signing
-    let domain_separator = 0u8;
-    let formatted_message = format_message(message, context, domain_separator)?;
+    let formatted_message = pure_message(message, context)?;
 
     // Call internal signing function
     let signature_bytes = ml_dsa_sign_internal(
@@ -50,15 +43,10 @@ pub fn hash_sign(
     hash_function: HashFunction,
     mode: SigningMode,
 ) -> Result<Signature> {
-    // Check if context is valid (max 255 bytes)
-    if context.len() > 255 {
-        return Err(Error::ContextTooLong);
-    }
-
     // Generate randomness for hedged mode or use zeros for deterministic mode
-    let mut rnd = [0u8; 32];
+    let mut rnd = Zeroizing::new([0u8; 32]);
     if let SigningMode::Hedged = mode {
-        OsRng.fill_bytes(&mut rnd);
+        OsRng.fill_bytes(rnd.as_mut());
     }
 
     // Call internal hash-then-sign function
@@ -73,25 +61,6 @@ pub fn hash_sign(
 
     // Create signature object
     Signature::new(signature_bytes, private_key.parameter_set())
-}
-
-/// Format message with domain separator and context
-fn format_message(message: &[u8], context: &[u8], domain_separator: u8) -> Result<Vec<u8>> {
-    let mut formatted = Vec::with_capacity(2 + context.len() + message.len());
-
-    // Add domain separator
-    formatted.push(domain_separator);
-
-    // Add context length
-    formatted.push(context.len() as u8);
-
-    // Add context
-    formatted.extend_from_slice(context);
-
-    // Add message
-    formatted.extend_from_slice(message);
-
-    Ok(formatted)
 }
 
 #[cfg(test)]

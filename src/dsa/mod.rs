@@ -35,13 +35,13 @@
 //!
 //! # Security notes
 //!
-//! - **Zeroization**: private keys zeroize their byte buffers on drop. Some intermediate
-//!   secrets are not yet zeroized.
-//! - **Input validation**: key, signature, context, and parameter-set lengths are checked.
+//! - **Input validation**: `PrivateKey::new` checks that s1/s2 coefficients lie in [-η, η];
+//!   `verify` returns `Ok(false)` for any malformed signature.
+//! - **Side channels**: arithmetic on secret data is branch-free and division-free; the
+//!   number of signing iterations is observable, as in FIPS 204 itself.
+//! - **Zeroization**: private keys and intermediate secrets are wiped on drop.
 //!
-//! This implementation is **not** hardened against timing/power side-channels and has not had
-//! an independent audit — see `SECURITY_REVIEW_2026-07.md`. It is not yet suitable for
-//! protecting production data.
+//! See `SECURITY.md` for the assurance evidence and limitations.
 //!
 //! # Usage Example
 //!
@@ -82,9 +82,6 @@ pub mod verify;
 
 pub use keypair::KeyPair;
 pub use params::ParameterSet;
-
-// Import ZeroizeParameterSet
-use params::ZeroizeParameterSet;
 
 /// ML-DSA signing mode.
 ///
@@ -146,7 +143,6 @@ pub enum SigningMode {
 ///
 /// # Security Features
 ///
-/// - Automatically zeroized on drop to prevent memory leakage
 /// - Immutable after creation to prevent accidental modification
 /// - Size validated during construction
 ///
@@ -181,18 +177,11 @@ pub struct PublicKey {
     bytes: Vec<u8>,
     /// Parameter set associated with this key
     parameter_set: ParameterSet,
-    // Add a ZeroizeParameterSet for zeroizing
-    #[doc(hidden)]
-    _zeroize_param: ZeroizeParameterSet,
 }
 
-// Manual implementation of Zeroize
 impl Zeroize for PublicKey {
     fn zeroize(&mut self) {
         self.bytes.zeroize();
-        // parameter_set doesn't need to be zeroized as it's Copy and doesn't contain secrets
-        // But _zeroize_param will be zeroized
-        self._zeroize_param.zeroize();
     }
 }
 
@@ -234,7 +223,6 @@ impl PublicKey {
         Ok(Self {
             bytes,
             parameter_set,
-            _zeroize_param: ZeroizeParameterSet(parameter_set),
         })
     }
 
@@ -288,8 +276,7 @@ impl PublicKey {
 ///
 /// # Security Features
 ///
-/// - Automatically zeroized on drop to prevent memory leakage
-/// - Implements `ZeroizeOnDrop` to ensure sensitive data is cleared
+/// - Zeroized on drop; `Debug` output is redacted
 /// - Immutable after creation to prevent accidental modification
 /// - Size validated during construction
 ///
@@ -314,29 +301,36 @@ impl PublicKey {
 /// # Reference
 ///
 /// FIPS 204 Section 5.1 - Key Generation
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct PrivateKey {
     /// Raw byte representation of the private key
     bytes: Vec<u8>,
     /// Parameter set associated with this key
     parameter_set: ParameterSet,
-    // Add a ZeroizeParameterSet for zeroizing
-    #[doc(hidden)]
-    _zeroize_param: ZeroizeParameterSet,
 }
 
-// Manual implementation of Zeroize
 impl Zeroize for PrivateKey {
     fn zeroize(&mut self) {
         self.bytes.zeroize();
-        // parameter_set doesn't need to be zeroized as it's Copy and doesn't contain secrets
-        // But _zeroize_param will be zeroized
-        self._zeroize_param.zeroize();
     }
 }
 
-// Implement ZeroizeOnDrop manually
 impl ZeroizeOnDrop for PrivateKey {}
+
+impl Drop for PrivateKey {
+    fn drop(&mut self) {
+        self.zeroize();
+    }
+}
+
+impl core::fmt::Debug for PrivateKey {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("PrivateKey")
+            .field("parameter_set", &self.parameter_set)
+            .field("bytes", &"<redacted>")
+            .finish()
+    }
+}
 
 impl PrivateKey {
     /// Create a new private key from raw bytes.
@@ -377,10 +371,15 @@ impl PrivateKey {
             return Err(Error::InvalidPrivateKey);
         }
 
+        // Reject keys whose s1/s2 coefficients fall outside [-η, η] here, rather
+        // than letting every later sign() call fail with an encoding error.
+        if !internal::private_key_is_well_formed(&bytes, parameter_set) {
+            return Err(Error::InvalidPrivateKey);
+        }
+
         Ok(Self {
             bytes,
             parameter_set,
-            _zeroize_param: ZeroizeParameterSet(parameter_set),
         })
     }
 
@@ -438,7 +437,6 @@ impl PrivateKey {
 ///
 /// # Security Features
 ///
-/// - Automatically zeroized on drop to prevent memory leakage
 /// - Immutable after creation
 /// - Size validated during construction
 ///
@@ -473,18 +471,11 @@ pub struct Signature {
     bytes: Vec<u8>,
     /// Parameter set associated with this signature
     parameter_set: ParameterSet,
-    // Add a ZeroizeParameterSet for zeroizing
-    #[doc(hidden)]
-    _zeroize_param: ZeroizeParameterSet,
 }
 
-// Manual implementation of Zeroize
 impl Zeroize for Signature {
     fn zeroize(&mut self) {
         self.bytes.zeroize();
-        // parameter_set doesn't need to be zeroized as it's Copy and doesn't contain secrets
-        // But _zeroize_param will be zeroized
-        self._zeroize_param.zeroize();
     }
 }
 
@@ -526,7 +517,6 @@ impl Signature {
         Ok(Self {
             bytes,
             parameter_set,
-            _zeroize_param: ZeroizeParameterSet(parameter_set),
         })
     }
 

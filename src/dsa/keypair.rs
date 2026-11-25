@@ -6,6 +6,7 @@ use super::internal::seed_to_keypair;
 use super::{ParameterSet, PrivateKey, PublicKey};
 use crate::error::{Error, Result};
 use rand::{rngs::OsRng, CryptoRng, RngCore};
+use zeroize::Zeroizing;
 
 /// ML-DSA key pair
 #[derive(Clone, Debug)]
@@ -37,12 +38,10 @@ impl KeyPair {
 
     /// Create a key pair from a seed
     pub fn from_seed(seed: &[u8], parameter_set: ParameterSet) -> Result<Self> {
-        if seed.len() != 32 {
-            return Err(Error::InvalidParameterSet);
-        }
-
-        let mut seed_array = [0u8; 32];
-        seed_array.copy_from_slice(seed);
+        let seed_array: Zeroizing<[u8; 32]> = Zeroizing::new(
+            seed.try_into()
+                .map_err(|_| Error::InvalidParameter("seed must be exactly 32 bytes".into()))?,
+        );
 
         seed_to_keypair(&seed_array, parameter_set)
     }
@@ -66,11 +65,7 @@ impl KeyPair {
 /// Generate a new ML-DSA key pair
 pub fn generate(parameter_set: ParameterSet) -> Result<KeyPair> {
     // Generate a random 32-byte seed
-    let mut seed = [0u8; 32];
-    OsRng.fill_bytes(&mut seed);
-
-    // Generate key pair from seed
-    seed_to_keypair(&seed, parameter_set)
+    generate_with_rng(parameter_set, &mut OsRng)
 }
 
 /// Generate a key pair with a provided RNG
@@ -79,8 +74,8 @@ where
     R: RngCore + CryptoRng,
 {
     // Generate a random 32-byte seed
-    let mut seed = [0u8; 32];
-    rng.fill_bytes(&mut seed);
+    let mut seed = Zeroizing::new([0u8; 32]);
+    rng.fill_bytes(seed.as_mut());
 
     // Generate key pair from seed
     seed_to_keypair(&seed, parameter_set)
