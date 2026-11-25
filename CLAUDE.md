@@ -1,49 +1,30 @@
 # TURTL - Build, Test and Style Guide
 
-## Build & Test Commands
+## Commands
 ```
-# Run all tests
-cargo test
+cargo test --release                                  # full suite (KATs, interop, adversarial)
+cargo test --release --test fips_interop              # one test file
+cargo clippy --all-targets -- -D warnings             # must be clean (CI enforces)
+cargo fmt --check
+RUSTDOCFLAGS="-D warnings" cargo doc --no-deps
 
-# Run a specific test
-cargo test test_name
-
-# Run specific test file
-cargo test --test error_handling_test
-
-# Run all benchmarks
-cargo bench
-
-# Run a specific benchmark
-cargo bench bench_name
-
-# Run specific module tests
-cargo test --package turtl --lib common::ntt::tests
-
-# Run with release optimizations
-cargo test --release
+# Adversarial (see ADVERSARIAL.md)
+TURTL_ADV_ITERS=5000 cargo test --release --test adversarial
+cargo test --release --test timing_leakage -- --ignored --test-threads=1 --nocapture
+cd fuzz && cargo +nightly fuzz run kem_decaps          # needs a C++ compiler
 ```
+The toolchain is pinned in `rust-toolchain.toml` so local clippy matches CI.
 
-## Code Style Guidelines
-- **Naming**: snake_case for functions/variables, PascalCase for types
-- **Indentation**: 4 spaces (no tabs)
-- **Documentation**: Use doc comments (///) for public items, module docs (//!)
-- **Error handling**: Use Result<T> with ? operator, proper error propagation
-- **Imports**: Group by std, external crates, then local modules
-- **No unsafe code**: Maintain 100% safe Rust
-- **Constant-time**: Use security::constant_time module for timing-attack resistance
-- **Fault protection**: Use security::fault_detection for validating operations
-- **Testing**: Unit tests in #[cfg(test)] modules, integration tests in /tests
-- **Memory safety**: Use zeroize for sensitive data
-- **Input validation**: Validate all public-facing inputs thoroughly
+## Code rules
+- 100% safe Rust (`#![forbid(unsafe_code)]`).
+- No `%`, `/`, `rem_euclid` or branches on secret data: use `common::reduce::ct_mod` /
+  `ct_normalize_small` and mask arithmetic. Public data (ciphertext parsing, `t1`, signatures
+  being verified) may branch.
+- Secret-holding types zeroize in `Drop` (a bare `impl ZeroizeOnDrop` does nothing); wrap
+  temporary secret buffers in `zeroize::Zeroizing`; secret types must not derive `Debug`.
+- Validate public inputs; `verify` returns `Ok(false)`, never `Err`, for a bad signature.
+- After touching algorithm code, run `fips_interop`, `keygen_kat`, `det_kat` and `adversarial`.
+- Doc comments on public items; snake_case / PascalCase; 4-space indentation.
 
-## Security Features
-- Implement constant-time operations for all secret-dependent code
-- Verify integrity of sensitive values with fault detection mechanisms
-- Use secure random number generation for all cryptographic operations
-- Maintain side-channel resistance in cryptographic implementations
-- Include thorough boundary and error checking
-
-## Features
-- Use `default-features = false` for no_std compatibility
-- Enable `nightly` feature for performance optimizations
+## Status
+See SECURITY.md for verified properties and remaining limitations.
