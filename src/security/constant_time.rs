@@ -424,3 +424,23 @@ pub fn ct_is_zero_u8(x: u8) -> bool {
     // Extract the high bit
     (z >> 7) == 1
 }
+
+/// Compares two byte slices for equality in constant time.
+///
+/// The running time depends only on the slice lengths, never on their contents
+/// or on where the first difference is. Slices of different lengths compare
+/// unequal (lengths are treated as public).
+#[inline]
+pub fn ct_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+
+    let mut diff: u8 = 0;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+
+    // Keep the optimizer from turning the accumulation into an early-exit loop.
+    ct_is_zero_u8(core::hint::black_box(diff))
+}
