@@ -138,9 +138,8 @@ fn ct_eq_equal_vs_first_byte_differs() {
         &mut other,
         |other, equal| {
             other.copy_from_slice(&a);
-            if !equal {
-                other[0] ^= 0xff;
-            }
+            // Same store in both classes; only the value differs.
+            other[0] = a[0] ^ if equal { 0 } else { 0xff };
         },
         |other| {
             black_box(turtl::security::ct_eq(black_box(&a), black_box(other)));
@@ -164,9 +163,8 @@ fn harness_detects_early_exit_compare() {
         &mut other,
         |other, equal| {
             other.copy_from_slice(&a);
-            if !equal {
-                other[0] ^= 0xff;
-            }
+            // Same store in both classes; only the value differs.
+            other[0] = a[0] ^ if equal { 0 } else { 0xff };
         },
         |other| {
             black_box(leaky_eq(black_box(&a), black_box(other)));
